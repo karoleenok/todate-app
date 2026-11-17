@@ -211,7 +211,7 @@ export default function App() {
   return (
     <div className="stage">
     <div className="phone">
-      {route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && !deskAdmin && <Header solid={route.name === 'routes' || route.name === 'route'} onBell={() => setNotifOpen(true)} onSearch={() => setSearchOpen(true)} />}
+      {route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && !deskAdmin && <Header mini={route.name === 'routes' || route.name === 'route'} routeKey={route.name} onBell={() => setNotifOpen(true)} onSearch={() => setSearchOpen(true)} />}
 
       {route.name === 'auth' && <Auth ctx={ctx} />}
       {route.name === 'invite' && <Invite ctx={ctx} />}

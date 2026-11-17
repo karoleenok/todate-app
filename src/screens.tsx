@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, COVERS, DISTRICTS, EVENTS, EVENT_CATEGORIES, IDEAS, LOCKED_SLOTS, NOTES, PLANS, ROUTES, cardSrc, eventSrc, placeSrc, inviteLine, type Category, type CityEvent, type Idea } from './data';
-import { botLink, openExternal, telegramShare, weekInfo, yandexPoint, yandexRoute, yandexSearch } from './links';
+import { botLink, botReady, openExternal, telegramShare, weekInfo, yandexPoint, yandexRoute, yandexSearch } from './links';
 import {
   Logo, Silhouette, IdeaTile, PhotoStub, MapStub, IconHeart, IconShare, IconChevron,
   IconCheck, IconSend, IconPin, IconChat, IconUser, IconTheme, IconLang, IconSliders, LockedTile, catClass, cardShapeColor,
@@ -676,6 +676,7 @@ export function InviteSheet({ ctx, onClose, onSkip }: { ctx: AppCtx; onClose: ()
     const url = botLink(code);
     const text = 'Привет! Я собираю идеи для свиданий в To Date. Давай подключим наши аккаунты: открой бота и нажми «Старт». Так мы будем видеть общие идеи и сюрпризы друг для друга.';
     try { sessionStorage.setItem('td_last_invite', JSON.stringify({ url, text })); } catch { /* ignore */ }
+    if (!botReady) ctx.toast('Бот ещё не подключён: ссылка не откроется');
     openExternal(telegramShare(url, text));
   };
   const again = () => {
@@ -752,6 +753,7 @@ export function HintForm({ ctx, id }: { ctx: AppCtx; id: string }) {
       ctx.go({ name: 'hint-sent', id: idea.id });
       return;
     }
+    if (!botReady) ctx.toast('Бот ещё не подключён: ссылка не откроется');
     openExternal(telegramShare(url, text));
     ctx.sendHint(idea.id, from, 'Telegram');
     ctx.go({ name: 'hint-sent', id: idea.id });
@@ -1537,6 +1539,7 @@ export function Events({ ctx }: { ctx: AppCtx }) {
             Пометка «Реклама» означает размещение партнёра.
           </p>
         )}
+        <NotesBoard ctx={ctx} />
         <div style={{ height: 40 }} />
       </div>
       {open && <EventSheet e={open} onClose={() => setOpen(null)} ctx={ctx} />}
@@ -1778,13 +1781,53 @@ export function LimitSheet({ ctx, onClose, onReset }: { ctx: AppCtx; onClose: ()
 }
 
 /* ================= ЗАМЕТКИ НА ПОЛЯХ ================= */
-export function NoteCard({ n }: { n: { author: string; text: string; contact: string } }) {
+// Контакт из заметки: @ник открываем в Telegram, e-mail — почтой. Остальное (сайт, название) показываем как текст.
+function noteHref(contact: string): string | null {
+  const c = contact.trim();
+  if (/^@[A-Za-z0-9_]{4,32}$/.test(c)) return `https://t.me/${c.slice(1)}`;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c)) return `mailto:${c}`;
+  return null;
+}
+
+export function NoteCard({ n, tone = 0 }: { n: { author: string; text: string; contact: string }; tone?: number }) {
+  const href = noteHref(n.contact);
+  const inner = (
+    <>
+      <div className="sticker-author">{n.author}</div>
+      <div className="sticker-text">{n.text}</div>
+      <div className="sticker-contact">{n.contact}</div>
+    </>
+  );
+  const cls = `sticker t${tone % 4}`;
+  if (!href) return <div className={cls} style={{ cursor: 'default' }}>{inner}</div>;
   return (
-    <div className="plate" style={{ padding: '14px 16px' }}>
-      <div style={{ fontWeight: 600, fontSize: 13 }}>{n.author}</div>
-      <div style={{ fontSize: 13, lineHeight: '17px', margin: '4px 0' }}>{n.text}</div>
-      <div style={{ fontSize: 11, color: 'var(--primary-dark)' }}>{n.contact}</div>
-    </div>
+    <button className={cls} aria-label={`Написать: ${n.author}`} onClick={() => (href.startsWith('mailto:') ? window.open(href, '_self') : openExternal(href))}>
+      {inner}
+    </button>
+  );
+}
+
+/* Блок в конце афиши: стикеры и приглашение оставить свою заметку */
+export function NotesBoard({ ctx }: { ctx: AppCtx }) {
+  if (NOTES.length === 0) return null;
+  const shown = NOTES.slice(0, 4);
+  return (
+    <section aria-labelledby="notes-title" style={{ marginTop: 36 }}>
+      <div style={px}>
+        <h2 id="notes-title" className="h2" style={{ margin: 0 }}>Заметки на полях</h2>
+        <p style={{ fontSize: 13, lineHeight: '17px', color: 'var(--text-2)', margin: '8px 0 0', maxWidth: 330 }}>
+          Не переживайте, если у вас нет пары. В нашем приложении можно познакомиться и с новыми друзьями.
+        </p>
+      </div>
+      <div className="notes-grid" style={{ ...pxList, marginTop: 18 }}>
+        {shown.map((n, i) => <NoteCard key={n.id} n={n} tone={i} />)}
+      </div>
+      <div style={{ ...pxList, display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+        <button className="btn-ghost" onClick={() => ctx.go({ name: 'notes' })}>
+          {NOTES.length > shown.length ? 'Все заметки' : 'Оставить свою заметку'}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -1800,10 +1843,10 @@ export function Notes({ ctx }: { ctx: AppCtx }) {
         <div style={px}>
           <h1 className="h1" style={{ margin: '0 0 8px' }}>Заметки на полях</h1>
           <p style={{ fontSize: 13, lineHeight: '17px', color: 'var(--text-2)', marginTop: 0, maxWidth: 330 }}>
-            Расскажите о себе, своём бизнесе или найдите друзей. Размещение — за символические 99 ₽ на неделю.
+            Не переживайте, если у вас нет пары. В нашем приложении можно познакомиться и с новыми друзьями. Размещение: 99 ₽ на неделю.
           </p>
-          <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-            {NOTES.map((n) => <NoteCard key={n.id} n={n} />)}
+          <div className="notes-grid" style={{ marginTop: 18 }}>
+            {NOTES.map((n, i) => <NoteCard key={n.id} n={n} tone={i} />)}
           </div>
           <div className="plate" style={{ marginTop: 16, padding: 16, display: 'grid', gap: 10 }}>
             <div className="h3">Оставить заметку</div>

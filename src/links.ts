@@ -1,7 +1,10 @@
 // Внешние ссылки: Яндекс Карты и Telegram
 
-// Имя бота — временное, подставим боевое, когда заведём бота в BotFather
-export const BOT_USERNAME = 'todate_bot';
+// Имя бота без @. Задаётся переменной VITE_BOT_USERNAME при сборке (GitHub → Settings → Variables).
+// Заглушки вроде todate_bot здесь быть не должно: такое имя может принадлежать чужому боту,
+// и тогда намёк уйдёт постороннему человеку.
+export const BOT_USERNAME = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_BOT_USERNAME ?? '').replace(/^@/, '').trim();
+export const botReady = /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(BOT_USERNAME);
 
 type Pt = { lat: number; lng: number };
 
@@ -18,13 +21,14 @@ export const yandexSearch = (text: string) =>
   `https://yandex.ru/maps/?text=${encodeURIComponent(`${text}, Санкт-Петербург`)}`;
 
 export const telegramShare = (url: string, text: string) =>
-  `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  url ? `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}` : '';
 
 // Ссылка на бота: после «Старт» бот получает код и связывает двоих
-export const botLink = (code: string) => `https://t.me/${BOT_USERNAME}?start=${code}`;
+export const botLink = (code: string) => (botReady ? `https://t.me/${BOT_USERNAME}?start=${code}` : '');
 
 // Внутри Telegram открываем через его методы, в браузере — новой вкладкой
 export function openExternal(url: string) {
+  if (!url) return;
   const tg = (window as unknown as { Telegram?: { WebApp?: { openLink?: (u: string) => void; openTelegramLink?: (u: string) => void } } }).Telegram?.WebApp;
   if (tg && url.startsWith('https://t.me/') && tg.openTelegramLink) tg.openTelegramLink(url);
   else if (tg && tg.openLink) tg.openLink(url);

@@ -171,23 +171,36 @@ export const catClass = (c: Category) => `cat-${c}`;
 export const catLabel = (c: Category) => categoryLabel(c);
 
 /* ---------- Шапка (всегда зафиксирована сверху) ---------- */
-export function Header({ onBell, onSearch, solid = false }: { onBell: () => void; onSearch: () => void; solid?: boolean }) {
-  // При прокрутке под шапкой появляется стеклянная плашка, чтобы логотип и кнопки не сливались с контентом
+export function Header({ onBell, onSearch, mini = false, routeKey = '' }: { onBell: () => void; onSearch: () => void; mini?: boolean; routeKey?: string }) {
+  // Шапка не должна закрывать контент:
+  // — на экранах с картой остаются две маленькие кнопки без плашки и логотипа (mini);
+  // — на остальных при прокрутке вниз шапка уезжает вверх, при прокрутке вверх возвращается;
+  // — стеклянная плашка появляется только когда под ней уже есть контент.
   const [scrolled, setScrolled] = React.useState(false);
+  const [hidden, setHidden] = React.useState(false);
   React.useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 6);
+    let last = window.scrollY;
+    const on = () => {
+      const y = window.scrollY;
+      setScrolled(y > 6);
+      const d = y - last;
+      if (y < 80) setHidden(false);
+      else if (d > 8) setHidden(true);
+      else if (d < -8) setHidden(false);
+      if (Math.abs(d) > 8 || y < 80) last = y;
+    };
     on();
     window.addEventListener('scroll', on, { passive: true });
     return () => window.removeEventListener('scroll', on);
-  }, []);
+  }, [routeKey]);
   return (
-    <div className="app-header">
-      <div className={`app-header-glass ${scrolled || solid ? 'on' : ''}`} aria-hidden="true" />
+    <div className={`app-header${mini ? ' mini' : ''}${hidden ? ' away' : ''}`}>
+      {!mini && <div className={`app-header-glass ${scrolled ? 'on' : ''}`} aria-hidden="true" />}
       <button className="circle-btn glass" onClick={onBell} aria-label="Уведомления" style={{ position: 'relative', pointerEvents: 'auto' }}>
         <IconBell />
-        <span style={{ position: 'absolute', top: 10, right: 12, width: 9, height: 9, borderRadius: '50%', background: 'var(--primary)', border: '2px solid var(--surface)' }} />
+        <span className="bell-dot" />
       </button>
-      <div style={{ paddingTop: 4, position: 'relative' }}><Logo /></div>
+      {!mini && <div style={{ paddingTop: 4, position: 'relative' }}><Logo /></div>}
       <button className="circle-btn glass" onClick={onSearch} aria-label="Поиск" style={{ pointerEvents: 'auto' }}><IconSearch /></button>
     </div>
   );
