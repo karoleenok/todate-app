@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { bindBackButton, onViewportChange, safeInsets } from './telegram';
 import { Header, BottomNav, type NavKey, IconBell } from './ui';
 import { weekInfo } from './links';
 import { lazy, Suspense } from 'react';
@@ -6,7 +7,6 @@ import { applyAdmin, getFreeHints, loadAdmin, saveAdmin, type AdminState } from 
 import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, HintView, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes, LimitSheet } from './screens';
 
 const Admin = lazy(() => import('./admin'));
-const Onboarding = lazy(() => import('./onboarding'));
 
 export type RouteName =
   | 'auth' | 'invite' | 'accept' | 'home' | 'idea' | 'hint' | 'hint-sent' | 'hint-view' | 'hints'
@@ -57,7 +57,21 @@ function routeFromHash(): Route {
   return { name: 'home' };
 }
 
+/** Широкий экран (ПК): админку показываем на всю страницу, а не в телефонной колонке */
+function useWide(min = 900) {
+  const q = `(min-width: ${min}px)`;
+  const [wide, setWide] = useState(() => window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const h = () => setWide(m.matches);
+    m.addEventListener('change', h);
+    return () => m.removeEventListener('change', h);
+  }, [q]);
+  return wide;
+}
+
 export default function App() {
+  const wide = useWide();
   const [route, setRoute] = useState<Route>(() => routeFromHash());
   const historyRef = useRef<Route[]>([]);
   const [favorites, setFavorites] = useState<string[]>(() => load('td_favs', ['ciao-kaiju', 'geocaching']));
@@ -78,30 +92,17 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const wk = useMemo(() => weekInfo(), []);
   const [weekOpen, setWeekOpen] = useState(false);
-  // Новичку показываем интерактивное обучение вместо плашки «карточки на неделю»
-  const [onb, setOnb] = useState<boolean>(() => {
-    try { return !localStorage.getItem('td_onb_done') && !/^#\/?(auth|invite|accept|hint-view|admin)/.test(window.location.hash); } catch { return false; }
-  });
-  const closeOnb = useCallback(() => {
-    setOnb(false);
-    try { localStorage.setItem('td_onb_done', '1'); } catch { /* ignore */ }
-  }, []);
-  useEffect(() => {
-    const h = () => setOnb(true);
-    window.addEventListener('td-onb-restart', h);
-    return () => window.removeEventListener('td-onb-restart', h);
-  }, []);
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Первый заход за неделю: напоминаем, что карточки обновляются раз в неделю
   useEffect(() => {
-    if (route.name !== 'home' || onb) return;
+    if (route.name !== 'home') return;
     let seen = '';
     try { seen = localStorage.getItem('td_week_seen') ?? ''; } catch { /* ignore */ }
     if (seen === wk.key) return;
     const t = window.setTimeout(() => setWeekOpen(true), 500);
     return () => window.clearTimeout(t);
-  }, [route.name, wk.key, onb]);
+  }, [route.name, wk.key]);
   const closeWeek = () => { setWeekOpen(false); try { localStorage.setItem('td_week_seen', wk.key); } catch { /* ignore */ } };
 
   useEffect(() => { localStorage.setItem('td_favs', JSON.stringify(favorites)); }, [favorites]);
@@ -123,14 +124,20 @@ export default function App() {
         phone.style.zoom = String(s);
         // Видимая высота в единицах канваса — чтобы шторки экранов ровно доходили до низа без серых полей
         phone.style.setProperty('--canvas-h', `${window.innerHeight / s}px`);
+        // Отступы Telegram (кнопки «закрыть/меню» в полноэкранном режиме) тоже переводим в единицы канваса
+        const ins = safeInsets();
+        phone.style.setProperty('--safe-top', `${ins.top / s}px`);
+        phone.style.setProperty('--safe-bottom', `${ins.bottom / s}px`);
       }
     };
     apply();
     window.addEventListener('resize', apply);
     window.addEventListener('orientationchange', apply);
+    const off = onViewportChange(apply);
     return () => {
       window.removeEventListener('resize', apply);
       window.removeEventListener('orientationchange', apply);
+      off();
     };
   }, []);
 
@@ -145,6 +152,9 @@ export default function App() {
     setRoute(prev ?? { name: 'home' });
     window.scrollTo({ top: 0 });
   }, []);
+
+  // Родная кнопка «Назад» в Telegram: свайп вниз отключён, поэтому возвращаться нужно чем-то заметным
+  useEffect(() => bindBackButton(route.name !== 'home' && !(route.name === 'admin' && wide), back), [route.name, back, wide]);
 
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -188,7 +198,8 @@ export default function App() {
     : route.name === 'events' ? 'events'
     : 'profile';
 
-  const showNav = route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept';
+  const deskAdmin = route.name === 'admin' && !!profile.isAdmin && wide;
+  const showNav = route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && !deskAdmin;
   const goNav = (k: NavKey) =>
     k === 'home' ? go({ name: 'home' })
     : k === 'routes' ? go({ name: 'routes' })
@@ -200,7 +211,7 @@ export default function App() {
   return (
     <div className="stage">
     <div className="phone">
-      {route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && <Header solid={route.name === 'routes' || route.name === 'route'} onBell={() => setNotifOpen(true)} onSearch={() => setSearchOpen(true)} />}
+      {route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && !deskAdmin && <Header solid={route.name === 'routes' || route.name === 'route'} onBell={() => setNotifOpen(true)} onSearch={() => setSearchOpen(true)} />}
 
       {route.name === 'auth' && <Auth ctx={ctx} />}
       {route.name === 'invite' && <Invite ctx={ctx} />}
@@ -219,9 +230,8 @@ export default function App() {
       {route.name === 'account' && <Account ctx={ctx} />}
       {route.name === 'paywall' && <Paywall ctx={ctx} />}
       {route.name === 'notes' && <Notes ctx={ctx} />}
-      {route.name === 'admin' && (profile.isAdmin
-        ? <Suspense fallback={<div className="screen" />}><Admin ctx={ctx} id={route.id} /></Suspense>
-        : <Profile ctx={ctx} />)}
+      {route.name === 'admin' && !profile.isAdmin && <Profile ctx={ctx} />}
+      {route.name === 'admin' && profile.isAdmin && !wide && <Suspense fallback={<div className="screen" />}><Admin ctx={ctx} id={route.id} /></Suspense>}
 
       {showNav && (
         <>
@@ -281,8 +291,6 @@ export default function App() {
         </div>
       )}
 
-      {onb && route.name !== 'auth' && <Suspense fallback={null}><Onboarding ctx={ctx} route={route} onClose={closeOnb} /></Suspense>}
-
       {/* Бесплатные намёки закончились */}
       {limitOpen && (
         <LimitSheet
@@ -298,6 +306,12 @@ export default function App() {
       {/* Быстрый вход в события из профиля-меню нет; добавим скрытый доступ: долгое нажатие на логотип не нужно. */}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
+    {deskAdmin && (
+      <div className="adm-overlay">
+        <Suspense fallback={null}><Admin ctx={ctx} id={route.id} desktop /></Suspense>
+        {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
+      </div>
+    )}
     </div>
   );
 }

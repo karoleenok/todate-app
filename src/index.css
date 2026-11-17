@@ -290,7 +290,7 @@ body {
 
 /* Нижнее меню-пилюля */
 .navbar {
-  position: fixed; bottom: calc(20px + env(safe-area-inset-bottom));
+  position: fixed; bottom: calc(20px + max(env(safe-area-inset-bottom), var(--safe-bottom, 0px)));
   left: 50%; transform: translateX(-50%);
   width: min(390px, 100% - 40px);
   display: flex; justify-content: space-between; align-items: flex-end;
@@ -374,10 +374,10 @@ body {
   position: fixed; top: 0; left: 50%; transform: translateX(-50%);
   width: 390px; max-width: 100%; z-index: 35;
   display: flex; justify-content: space-between; align-items: center;
-  padding: 20px 20px 0; pointer-events: none;
+  padding: calc(20px + var(--safe-top, 0px)) 20px 0; pointer-events: none;
 }
 .app-header-glass {
-  position: absolute; left: 0; right: 0; top: 0; height: 84px; z-index: -1;
+  position: absolute; left: 0; right: 0; top: 0; height: calc(84px + var(--safe-top, 0px)); z-index: -1;
   border-radius: 0 0 28px 28px;
   background: rgba(245, 246, 248, 0.58);
   -webkit-backdrop-filter: blur(20px) saturate(1.7);
@@ -487,3 +487,28 @@ body {
   position: absolute; top: 11px; right: 11px; width: 9px; height: 9px; border-radius: 50%;
   background: var(--primary); box-shadow: 0 0 0 2px #fff;
 }
+
+/* ---------- Админка на ПК ---------- */
+.adm-overlay { position: fixed; inset: 0; z-index: 200; background: var(--surface); overflow: auto; overscroll-behavior: contain; }
+.adm { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100dvh; }
+.adm-side {
+  position: sticky; top: 0; height: 100dvh; box-sizing: border-box; padding: 28px 18px 24px;
+  background: var(--bg); border-right: 1px solid var(--divider); display: flex; flex-direction: column; gap: 4px;
+}
+.adm-nav {
+  height: 44px; border-radius: 999px; border: none; background: transparent; text-align: left; padding: 0 18px;
+  font: 500 14px/1 var(--font-body); color: var(--text); cursor: pointer; transition: background .15s ease, color .15s ease;
+}
+.adm-nav:hover { background: var(--surface); }
+.adm-nav[aria-current='page'] { background: var(--primary); color: #fff; }
+.adm-nav:focus-visible, .adm-card:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2px; }
+.adm-main { padding: 40px 48px 80px; min-width: 0; }
+.adm-wrap { max-width: 1040px; }
+.adm-main .btn-primary, .adm-main .btn-ghost { width: auto !important; min-width: 220px; }
+.adm-tiles { display: grid; align-items: start; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 16px; }
+.adm-card { display: flex; flex-direction: column; justify-content: flex-start; background: none; border: none; padding: 0; cursor: pointer; text-align: left; font: inherit; color: inherit; border-radius: 20px; transition: transform .15s ease; }
+.adm-card:hover { transform: translateY(-3px); }
+.adm-form { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; max-width: 860px; }
+.adm-form > *, .adm-form .adm-pair > * { margin-bottom: 0 !important; }
+.adm-form .wide { grid-column: 1 / -1; }
+.adm-form .input { height: 44px; }

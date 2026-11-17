@@ -576,7 +576,7 @@ export function Home({ ctx }: { ctx: AppCtx }) {
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
       <div className="deck-stick">
-        <div style={{ height: 100 }} />
+        <div style={{ height: 'calc(100px + var(--safe-top, 0px))' }} />
         <Deck ideas={IDEAS.slice(0, 4)} onOpen={(id) => ctx.go({ name: 'idea', id })} height={395} />
       </div>
       <div className="sheet" style={{ marginTop: 8, minHeight: '55dvh' }}>
@@ -628,7 +628,7 @@ export function IdeaDetail({ ctx, id }: { ctx: AppCtx; id: string }) {
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
       <div className="deck-stick">
-        <div style={{ height: 84 }} />
+        <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
         <SingleCard idea={idea} height={360} />
       </div>
       {/* У картинки внизу плашки «время» и «цена», шторка их не закрывает */}
@@ -765,7 +765,7 @@ export function HintForm({ ctx, id }: { ctx: AppCtx; id: string }) {
 
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10 }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -876,7 +876,7 @@ export function HintSent({ ctx, id }: { ctx: AppCtx; id: string }) {
   };
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10 }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -921,7 +921,7 @@ export function HintView({ ctx, id }: { ctx: AppCtx; id: string }) {
   if (!hint) {
     return (
       <div className="screen" style={{ paddingBottom: 130 }}>
-        <div style={{ height: 84 }} />
+        <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
         <div className="sheet" style={{ marginTop: 10, minHeight: '50dvh' }}>
           <div className="sheet-handle" />
           <div style={px}>
@@ -935,7 +935,7 @@ export function HintView({ ctx, id }: { ctx: AppCtx; id: string }) {
   const heard = hint.status === 'услышан';
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10 }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -989,7 +989,7 @@ export function MyHints({ ctx, id }: { ctx: AppCtx; id?: string }) {
   const newCount = incoming.filter((h) => h.status === 'отправлен').length;
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10, minHeight: '60dvh' }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -1439,7 +1439,7 @@ export function Events({ ctx }: { ctx: AppCtx }) {
 
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10, minHeight: '70dvh' }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -1577,8 +1577,6 @@ export function Profile({ ctx }: { ctx: AppCtx }) {
             {row(<IconTheme />, 'Тема', () => ctx.toast('Светлая тема. Тёмная — в планах'))}
             <div style={{ height: 1, background: 'var(--divider)', margin: '0 16px 0 60px' }} />
             {row(<IconLang />, 'Язык', () => ctx.toast('Пока только русский'))}
-            <div style={{ height: 1, background: 'var(--divider)', margin: '0 16px 0 60px' }} />
-            {row(<IconSliders />, 'Показать обучение заново', () => { try { localStorage.removeItem('td_onb_done'); } catch { /* ignore */ } ctx.go({ name: 'home' }); window.dispatchEvent(new Event('td-onb-restart')); })}
           </div>
           <div className="plate" style={{ padding: 0, overflow: 'hidden' }}>
             {ctx.profile.isAdmin
@@ -1599,7 +1597,7 @@ export function Account({ ctx }: { ctx: AppCtx }) {
   const [email, setEmail] = useState(ctx.profile.email);
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10, minHeight: '60dvh' }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -1659,7 +1657,7 @@ export function Paywall({ ctx }: { ctx: AppCtx }) {
   const chosen = PLANS.find((p) => p.id === plan)!;
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10 }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -1767,7 +1765,7 @@ export function Notes({ ctx }: { ctx: AppCtx }) {
   const valid = text.trim().length >= 10 && contact.trim().length >= 2;
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10 }}>
         <div className="sheet-handle" />
         <div style={px}>

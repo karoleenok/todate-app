@@ -1,18 +1,32 @@
 /* Админка. Грузится отдельным куском и только когда включён режим админа.
    В прототипе роль хранится в профиле. В боевой версии роль определяет сервер по подписи Telegram (initData),
    а флаг в браузере ничего не значит. */
-import React, { useRef, useState } from 'react';
+import React, { createContext, useContext, useRef, useState } from 'react';
 import type { AppCtx } from './App';
 import { CATEGORIES, EVENTS, IDEAS, PLANS, cardSrc, type Category, type Idea } from './data';
 import { getFreeHints, money, parseMoney, type AdminState, type IdeaPatch } from './store';
-import { IconChevron } from './ui';
+import { IconChevron, Logo } from './ui';
 
 const px: React.CSSProperties = { padding: '0 30px' };
 
-function Shell({ ctx, title, sub, children, back }: { ctx: AppCtx; title: string; sub?: string; children: React.ReactNode; back?: boolean }) {
+/* true, когда админка открыта на ПК (широкий экран): боковое меню и просторные формы */
+const DeskCtx = createContext(false);
+
+function Shell({ ctx, title, sub, children, back, narrow }: { ctx: AppCtx; title: string; sub?: string; children: React.ReactNode; back?: boolean; narrow?: number }) {
+  const desk = useContext(DeskCtx);
+  if (desk) {
+    return (
+      <div>
+        {back && <button className="link-btn" style={{ padding: '4px 0 12px', fontSize: 13 }} onClick={() => ctx.back()}>← Назад</button>}
+        <h1 className="h1" style={{ margin: 0 }}>{title}</h1>
+        {sub && <p style={{ fontSize: 14, lineHeight: '20px', color: 'var(--text-2)', margin: '10px 0 0', maxWidth: 560 }}>{sub}</p>}
+        <div style={{ marginTop: 28, maxWidth: narrow }}>{children}</div>
+      </div>
+    );
+  }
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
-      <div style={{ height: 84 }} />
+      <div style={{ height: 'calc(84px + var(--safe-top, 0px))' }} />
       <div className="sheet" style={{ marginTop: 10, minHeight: '60dvh' }}>
         <div className="sheet-handle" />
         <div style={px}>
@@ -29,9 +43,9 @@ function Shell({ ctx, title, sub, children, back }: { ctx: AppCtx; title: string
   );
 }
 
-function Field({ label, hint, children, id }: { label: string; hint?: string; children: React.ReactNode; id: string }) {
+function Field({ label, hint, children, id, wide }: { label: string; hint?: string; children: React.ReactNode; id: string; wide?: boolean }) {
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div className={wide ? 'wide' : undefined} style={{ marginBottom: 14 }}>
       <label htmlFor={id} style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{label}</label>
       {children}
       {hint && <div style={{ fontSize: 11, lineHeight: '14px', color: 'var(--text-2)', marginTop: 5 }}>{hint}</div>}
@@ -74,7 +88,39 @@ async function prepareCard(file: File): Promise<string> {
   return c.toDataURL('image/webp', 0.86);
 }
 
-export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
+export default function Admin({ ctx, id, desktop = false }: { ctx: AppCtx; id?: string; desktop?: boolean }) {
+  if (!desktop) return <AdminBody ctx={ctx} id={id} />;
+  return (
+    <DeskCtx.Provider value={true}>
+      <DeskFrame ctx={ctx} id={id}><AdminBody ctx={ctx} id={id} /></DeskFrame>
+    </DeskCtx.Provider>
+  );
+}
+
+const NAV: [string, string][] = [['home', 'Обзор'], ['cards', 'Карточки'], ['events', 'Афиша'], ['plans', 'Подписка и лимит'], ['stats', 'Намёки']];
+
+function DeskFrame({ ctx, id, children }: { ctx: AppCtx; id?: string; children: React.ReactNode }) {
+  const active = !id ? 'home' : id === 'new' || id.startsWith('c:') ? 'cards' : id;
+  return (
+    <div className="adm">
+      <aside className="adm-side">
+        <div style={{ padding: '4px 18px 22px' }}><Logo /></div>
+        <nav aria-label="Разделы админки" style={{ display: 'grid', gap: 4 }}>
+          {NAV.map(([k, label]) => (
+            <button key={k} className="adm-nav" aria-current={active === k ? 'page' : undefined} onClick={() => ctx.go(k === 'home' ? { name: 'admin' } : { name: 'admin', id: k })}>{label}</button>
+          ))}
+        </nav>
+        <div style={{ flex: 1 }} />
+        <button className="adm-nav" onClick={() => ctx.go({ name: 'home' })}>← В приложение</button>
+        <button className="adm-nav" onClick={() => { ctx.setProfile({ ...ctx.profile, isAdmin: false }); ctx.go({ name: 'profile' }); }}>Выйти из админки</button>
+      </aside>
+      <main className="adm-main"><div className="adm-wrap">{children}</div></main>
+    </div>
+  );
+}
+
+function AdminBody({ ctx, id }: { ctx: AppCtx; id?: string }) {
+  const desk = useContext(DeskCtx);
   const a = ctx.admin;
   const save = (next: AdminState, msg = 'Сохранено') => { ctx.saveAdmin(next); ctx.toast(msg); };
 
@@ -82,8 +128,18 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
   if (!id) {
     const inN = ctx.hints.filter((h) => h.dir === 'in').length;
     return (
-      <Shell ctx={ctx} title="Админка" sub="Здесь правим то, что видят пользователи. Сохранённое сразу попадает в приложение.">
-        <div style={{ display: 'grid', gap: 10 }}>
+      <Shell ctx={ctx} title="Админка" narrow={desk ? 900 : undefined} sub="Здесь правим то, что видят пользователи. Сохранённое сразу попадает в приложение.">
+        {desk && (
+          <div className="adm-tiles" style={{ marginBottom: 20 }}>
+            {([['Карточек', IDEAS.length], ['В «Выборе To Date»', EVENTS.filter((e) => e.pick).length], ['Намёков всего', ctx.hints.length], ['Услышано', ctx.hints.filter((h) => h.status === 'услышан').length]] as [string, number][]).map(([k, v]) => (
+              <div key={k} className="plate" style={{ padding: '18px 20px' }}>
+                <div className="h2" style={{ margin: 0 }}>{v}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 6 }}>{k}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: desk ? '1fr 1fr' : '1fr' }}>
           <MenuRow title="Карточки" text={`${IDEAS.length} шт. Описание, метро, цена, длительность, место и сюрприз.`} onClick={() => ctx.go({ name: 'admin', id: 'cards' })} />
           <MenuRow title="Афиша: «Выбор To Date»" text={`${EVENTS.filter((e) => e.pick).length} из ${EVENTS.length} событий отмечено.`} onClick={() => ctx.go({ name: 'admin', id: 'events' })} />
           <MenuRow title="Подписка и лимит" text={`Цены, бесплатных намёков: ${getFreeHints()}.`} onClick={() => ctx.go({ name: 'admin', id: 'plans' })} />
@@ -92,7 +148,7 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
         <div className="plate" style={{ marginTop: 18, padding: 16, fontSize: 12, lineHeight: '16px', color: 'var(--text-2)' }}>
           <b style={{ color: 'var(--text)' }}>Это прототип.</b> Данные лежат в браузере, а роль админа включается переключателем в профиле. В боевой версии роль проверяет сервер по подписи Telegram, а сюрпризы хранятся только на сервере.
         </div>
-        <button className="btn-ghost" style={{ width: '100%', marginTop: 16 }} onClick={() => { ctx.setProfile({ ...ctx.profile, isAdmin: false }); ctx.go({ name: 'profile' }); }}>Выйти из админки</button>
+        {!desk && <button className="btn-ghost" style={{ width: '100%', marginTop: 16 }} onClick={() => { ctx.setProfile({ ...ctx.profile, isAdmin: false }); ctx.go({ name: 'profile' }); }}>Выйти из админки</button>}
       </Shell>
     );
   }
@@ -100,8 +156,20 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
   /* ---------- список карточек ---------- */
   if (id === 'cards') {
     return (
-      <Shell ctx={ctx} title="Карточки" back>
+      <Shell ctx={ctx} title="Карточки" back={!desk}>
         <button className="btn-primary" style={{ width: '100%', marginBottom: 14 }} onClick={() => ctx.go({ name: 'admin', id: 'new' })}>Добавить карточку</button>
+        {desk ? (
+          <div className="adm-tiles">
+            {IDEAS.map((i) => (
+              <button key={i.id} className="adm-card" onClick={() => ctx.go({ name: 'admin', id: `c:${i.id}` })}>
+                <span style={{ display: 'block', aspectRatio: '795 / 1365', borderRadius: 18, background: 'var(--bg)', overflow: 'hidden' }}>
+                  {i.image && <img src={cardSrc(i.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                </span>
+                <span style={{ display: 'block', fontSize: 13, lineHeight: '17px', marginTop: 8, textAlign: 'left' }}>{i.title}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {IDEAS.map((i) => (
             <button key={i.id} className="plate" onClick={() => ctx.go({ name: 'admin', id: `c:${i.id}` })} style={{ display: 'flex', alignItems: 'center', gap: 12, border: 'none', textAlign: 'left', cursor: 'pointer', padding: 10, width: '100%' }}>
@@ -113,6 +181,7 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
             </button>
           ))}
         </div>
+        )}
       </Shell>
     );
   }
@@ -125,7 +194,7 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
   /* ---------- афиша ---------- */
   if (id === 'events') {
     return (
-      <Shell ctx={ctx} title="Выбор To Date" sub="Отмеченные события появляются в афише в блоке «Выбор To Date».">
+      <Shell ctx={ctx} title="Выбор To Date" narrow={720} sub="Отмеченные события появляются в афише в блоке «Выбор To Date».">
         <div style={{ display: 'grid', gap: 10 }}>
           {EVENTS.map((e) => {
             const on = !!e.pick;
@@ -164,7 +233,7 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
       ['Бесплатных осталось у этого аккаунта', ctx.freeLeft === null ? 'подписка' : ctx.freeLeft],
     ];
     return (
-      <Shell ctx={ctx} title="Намёки" sub="Здесь только цифры. Тексты сюрпризов в статистику не попадают." back>
+      <Shell ctx={ctx} title="Намёки" narrow={560} sub="Здесь только цифры. Тексты сюрпризов в статистику не попадают." back={!desk}>
         <div className="plate" style={{ padding: '4px 16px' }}>
           {rows.map(([k, v], n) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '12px 0', fontSize: 13, borderTop: n ? '1px solid var(--divider)' : 'none' }}>
@@ -180,11 +249,12 @@ export default function Admin({ ctx, id }: { ctx: AppCtx; id?: string }) {
 
 function PlansForm({ ctx, save }: { ctx: AppCtx; save: (a: AdminState, m?: string) => void }) {
   const a = ctx.admin;
+  const desk = useContext(DeskCtx);
   const [vals, setVals] = useState<Record<string, string>>(() => Object.fromEntries(PLANS.map((p) => [p.id, String(parseMoney(p.price))])));
   const [free, setFree] = useState(getFreeHints());
   const ok = PLANS.every((p) => parseMoney(vals[p.id]) >= 1);
   return (
-    <Shell ctx={ctx} title="Подписка и лимит" back>
+    <Shell ctx={ctx} title="Подписка и лимит" narrow={520} back={!desk}>
       {PLANS.map((p) => (
         <Field key={p.id} id={`plan-${p.id}`} label={`${p.title}, ₽`}>
           <input id={`plan-${p.id}`} className="input" inputMode="numeric" value={vals[p.id]} onChange={(e) => setVals((v) => ({ ...v, [p.id]: e.target.value.replace(/\D/g, '').slice(0, 6) }))} />
@@ -210,6 +280,7 @@ function PlansForm({ ctx, save }: { ctx: AppCtx; save: (a: AdminState, m?: strin
 
 function CardForm({ ctx, id, save }: { ctx: AppCtx; id: string; save: (a: AdminState, m?: string) => void }) {
   const a = ctx.admin;
+  const desk = useContext(DeskCtx);
   const isNew = id === 'new';
   const base = isNew ? undefined : IDEAS.find((i) => i.id === id.slice(2));
   const [f, setF] = useState({
@@ -252,9 +323,10 @@ function CardForm({ ctx, id, save }: { ctx: AppCtx; id: string; save: (a: AdminS
 
   return (
     <Shell ctx={ctx} title={isNew ? 'Новая карточка' : 'Карточка'} sub={isNew ? undefined : 'Саму картинку не меняем. Правим то, что внутри открытой карточки.'} back>
+      <div className={desk ? 'adm-form' : undefined}>
       {isNew && (
         <>
-          <Field id="file" label="Картинка карточки" hint="PNG, JPG или WebP, пропорции 795×1365. Скруглённые углы добавим сами.">
+          <Field id="file" wide label="Картинка карточки" hint="PNG, JPG или WebP, пропорции 795×1365. Скруглённые углы добавим сами.">
             <input ref={fileRef} id="file" type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={(e) => onFile(e.target.files?.[0])} />
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <span style={{ width: 66, height: 113, borderRadius: 14, background: '#E9ECF1', overflow: 'hidden', flex: 'none' }}>
@@ -264,7 +336,7 @@ function CardForm({ ctx, id, save }: { ctx: AppCtx; id: string; save: (a: AdminS
             </div>
             {err && <div role="alert" style={{ fontSize: 12, lineHeight: '16px', color: '#C23B3B', marginTop: 8 }}>{err}</div>}
           </Field>
-          <Field id="cat" label="Категория">
+          <Field id="cat" wide label="Категория">
             <div className="row-scroll" role="radiogroup">
               {CATEGORIES.map((c) => (
                 <button key={c.key} role="radio" aria-checked={cat === c.key} className={`chip ${cat === c.key ? 'active' : ''}`} onClick={() => setCat(c.key)}>{c.label}</button>
@@ -273,20 +345,23 @@ function CardForm({ ctx, id, save }: { ctx: AppCtx; id: string; save: (a: AdminS
           </Field>
         </>
       )}
-      <Field id="f-title" label="Заголовок"><input id="f-title" className="input" value={f.title} onChange={set('title')} maxLength={160} /></Field>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <Field id="f-title" wide label="Заголовок"><input id="f-title" className="input" value={f.title} onChange={set('title')} maxLength={160} /></Field>
+      <div className="adm-pair" style={{ display: desk ? 'contents' : 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field id="f-dur" label="Длительность"><input id="f-dur" className="input" value={f.duration} onChange={set('duration')} maxLength={30} /></Field>
         <Field id="f-price" label="Цена"><input id="f-price" className="input" value={f.price} onChange={set('price')} maxLength={30} /></Field>
       </div>
       <Field id="f-metro" label="Метро"><input id="f-metro" className="input" placeholder="м. Площадь Восстания" value={f.metro} onChange={set('metro')} maxLength={50} /></Field>
       <Field id="f-place" label="Название места"><input id="f-place" className="input" value={f.place} onChange={set('place')} maxLength={80} /></Field>
-      <Field id="f-addr" label="Адрес"><input id="f-addr" className="input" value={f.address} onChange={set('address')} maxLength={120} /></Field>
-      <Field id="f-desc" label="Описание"><textarea id="f-desc" style={area} value={f.description} onChange={set('description')} maxLength={600} /></Field>
-      <Field id="f-secret" label="Секрет для второй половинки" hint="Видит только получатель намёка. Отправитель не увидит его нигде. Текст выводим как простой текст.">
+      <Field id="f-addr" wide label="Адрес"><input id="f-addr" className="input" value={f.address} onChange={set('address')} maxLength={120} /></Field>
+      <Field id="f-desc" wide label="Описание"><textarea id="f-desc" style={area} value={f.description} onChange={set('description')} maxLength={600} /></Field>
+      <Field id="f-secret" wide label="Секрет для второй половинки" hint="Видит только получатель намёка. Отправитель не увидит его нигде. Текст выводим как простой текст.">
         <textarea id="f-secret" style={area} value={f.secret} onChange={set('secret')} maxLength={400} />
       </Field>
-      <button className="btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={!valid} onClick={submit}>{isNew ? 'Добавить' : 'Сохранить'}</button>
-      {!isNew && <button className="btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={remove}>{a.added.some((i) => i.id === base!.id) ? 'Удалить карточку' : 'Скрыть карточку'}</button>}
+      <div className="wide adm-actions">
+        <button className="btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={!valid} onClick={submit}>{isNew ? 'Добавить' : 'Сохранить'}</button>
+        {!isNew && <button className="btn-ghost" style={{ width: '100%', marginTop: 8 }} onClick={remove}>{a.added.some((i) => i.id === base!.id) ? 'Удалить карточку' : 'Скрыть карточку'}</button>}
+      </div>
+      </div>
     </Shell>
   );
 }
