@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useMemo, useRef, useState } from 'react';
-import { CATEGORIES, COVERS, DISTRICTS, EVENTS, EVENT_CATEGORIES, IDEAS, LOCKED_SLOTS, NOTES, PLANS, ROUTES, cardSrc, inviteLine, type Category, type CityEvent, type Idea } from './data';
+import { CATEGORIES, COVERS, DISTRICTS, EVENTS, EVENT_CATEGORIES, IDEAS, LOCKED_SLOTS, NOTES, PLANS, ROUTES, cardSrc, eventSrc, placeSrc, inviteLine, type Category, type CityEvent, type Idea } from './data';
 import { botLink, openExternal, telegramShare, weekInfo, yandexPoint, yandexRoute, yandexSearch } from './links';
 import {
   Logo, Silhouette, IdeaTile, PhotoStub, MapStub, IconHeart, IconShare, IconChevron,
@@ -1169,11 +1169,11 @@ export function Favorites({ ctx }: { ctx: AppCtx }) {
 }
 
 /* ================= МАРШРУТЫ ================= */
-function RoutePhotoCard({ r, onClick }: { r: (typeof ROUTES)[number]; onClick: () => void }) {
+export function RoutePhotoCard({ r, onClick }: { r: (typeof ROUTES)[number]; onClick: () => void }) {
   return (
     <button style={{ flex: '0 0 196px', width: 196, border: 'none', background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column' }} onClick={onClick}>
       <div style={{ position: 'relative' }}>
-        <PhotoStub hue={r.hue} src={r.cover && `./places/${r.cover}.webp`} style={{ width: 196, height: 200, borderRadius: 24 }} />
+        <PhotoStub hue={r.hue} src={r.cover ? placeSrc(r.cover) : undefined} style={{ width: 196, height: 200, borderRadius: 24 }} />
         <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {[...r.tags, r.price].map((t) => (
             <span key={t} className="photo-pill">{t}</span>
@@ -1224,7 +1224,7 @@ export function Routes({ ctx }: { ctx: AppCtx }) {
                 {g.items.map((r) => (
                   <button key={r.id} className="plate" style={{ display: 'flex', gap: 14, alignItems: 'center', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 10 }} onClick={() => ctx.go({ name: 'route', id: r.id })}>
                     <div style={{ position: 'relative', flex: 'none' }}>
-                      <PhotoStub hue={r.hue} src={r.cover && `./places/${r.cover}.webp`} style={{ width: 100, height: 100, borderRadius: 20 }} />
+                      <PhotoStub hue={r.hue} src={r.cover ? placeSrc(r.cover) : undefined} style={{ width: 100, height: 100, borderRadius: 20 }} />
                       <span className="photo-pill small" style={{ position: 'absolute', top: 8, left: 8 }}>{r.district}</span>
                     </div>
                     <div style={{ minWidth: 0 }}>
@@ -1245,8 +1245,8 @@ export function Routes({ ctx }: { ctx: AppCtx }) {
 
 /* ================= МАРШРУТ: ДЕТАЛЬ ================= */
 /* Фото места: одно — целиком, несколько — стопкой с наклоном; тап открывает все */
-function PlacePhotos({ names, hue, onOpen }: { names: string[]; hue: number; onOpen: () => void }) {
-  const src = (n: string) => `./places/${n}.webp`;
+export function PlacePhotos({ names, hue, onOpen }: { names: string[]; hue: number; onOpen: () => void }) {
+  const src = (n: string) => placeSrc(n);
   if (names.length === 0) return <PhotoStub hue={hue} style={{ height: 130, borderRadius: 20 }} />;
   if (names.length === 1) {
     return <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(); }} aria-label="Открыть фото" style={{ border: 'none', padding: 0, background: 'none', display: 'block', width: '100%', cursor: 'zoom-in' }}>
@@ -1271,7 +1271,7 @@ function PhotoViewer({ names, start, onClose }: { names: string[]; start: number
         <div ref={ref} style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none' }}>
           {names.map((n) => (
             <div key={n} style={{ flex: '0 0 100%', scrollSnapAlign: 'center', padding: '0 16px', boxSizing: 'border-box' }}>
-              <img src={`./places/${n}.webp`} alt="" style={{ width: '100%', maxHeight: '70dvh', objectFit: 'cover', borderRadius: 24, display: 'block' }} />
+              <img src={placeSrc(n)} alt="" style={{ width: '100%', maxHeight: '70dvh', objectFit: 'cover', borderRadius: 24, display: 'block' }} />
             </div>
           ))}
         </div>
@@ -1377,28 +1377,73 @@ export function RouteDetail({ ctx, id }: { ctx: AppCtx; id: string }) {
 /* ================= АФИША НЕДЕЛИ ================= */
 type DayF = 'week' | 'today' | 'weekend';
 
+/** Содержимое шторки события: фото, параметры, название, описание. Используется и в приложении, и в предпросмотре админки */
+export function EventDetailBody({ e }: { e: CityEvent }) {
+  const d = weekInfo().day(e.dayOffset);
+  return (
+    <>
+      <PhotoStub hue={e.hue} src={e.photo ? eventSrc(e.photo) : undefined} style={{ height: 170, borderRadius: 28 }} />
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 14 }}>
+        <span className="param">{d.short}, {e.time}</span>
+        <span className="param">{e.price}</span>
+        {e.sponsored && <span className="param">Реклама</span>}
+      </div>
+      <h2 className="h3" style={{ margin: '12px 0 4px' }}>{e.title}</h2>
+      <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{e.place}</div>
+      <p style={{ fontSize: 13, lineHeight: '17px', margin: '12px 0 0' }}>{e.description}</p>
+      {e.sponsored && (
+        <p style={{ fontSize: 11, lineHeight: '14px', color: 'var(--text-2)', margin: '10px 0 0' }}>
+          Реклама.{e.advertiser ? ` ${e.advertiser}.` : ''}{e.erid ? ` erid: ${e.erid}` : ' Рекламодатель и erid указываются здесь по закону о рекламе.'}
+        </p>
+      )}
+    </>
+  );
+}
+
+const evPill = (e: CityEvent) => `${weekInfo().day(e.dayOffset).short.slice(0, 2)} ${e.time}`;
+
+/** Большая карточка «Выбор To Date» */
+export function EventPick({ e, onClick }: { e: CityEvent; onClick?: () => void }) {
+  return (
+    <button style={{ flex: '0 0 252px', width: 252, border: 'none', background: 'none', padding: 0, textAlign: 'left', cursor: onClick ? 'pointer' : 'default' }} onClick={onClick}>
+      <div style={{ position: 'relative' }}>
+        <PhotoStub hue={e.hue} src={e.photo ? eventSrc(e.photo) : undefined} style={{ width: 252, height: 230, borderRadius: 30 }} />
+        <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          <span className="photo-pill">{evPill(e)}</span>
+          <span className="photo-pill">{e.price}</span>
+          {e.sponsored && <span className="photo-pill">Реклама</span>}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--text-2)', marginTop: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.place}</div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, lineHeight: '18px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.title}</div>
+    </button>
+  );
+}
+
+/** Строка афиши в списке */
+export function EventRow({ e, onClick }: { e: CityEvent; onClick?: () => void }) {
+  return (
+    <button className="plate" style={{ display: 'flex', gap: 14, alignItems: 'center', border: 'none', cursor: onClick ? 'pointer' : 'default', textAlign: 'left', padding: 10, width: '100%' }} onClick={onClick}>
+      <div style={{ position: 'relative', flex: 'none' }}>
+        <PhotoStub hue={e.hue} src={e.photo ? eventSrc(e.photo) : undefined} style={{ width: 100, height: 100, borderRadius: 20 }} />
+        <span className="photo-pill small" style={{ position: 'absolute', top: 8, left: 8 }}>{e.time}</span>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13, lineHeight: '16px', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.title}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 4, lineHeight: '14px' }}>{e.place} · {e.price}</div>
+        {e.sponsored && <div style={{ fontSize: 10, lineHeight: '12px', color: 'var(--text-2)', marginTop: 4 }}>Реклама</div>}
+      </div>
+    </button>
+  );
+}
+
 function EventSheet({ e, onClose, ctx }: { e: CityEvent; onClose: () => void; ctx: AppCtx }) {
-  const wk = weekInfo();
-  const d = wk.day(e.dayOffset);
   const [invite, setInvite] = useState(false);
   return (
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-label={e.title}>
       <div className="modal-sheet" onClick={(ev) => ev.stopPropagation()}>
         <div className="sheet-handle" style={{ position: 'static', margin: '6px auto 14px' }} />
-        <PhotoStub hue={e.hue} src={e.photo && `./events/${e.photo}.webp`} style={{ height: 170, borderRadius: 28 }} />
-        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 14 }}>
-          <span className="param">{d.short}, {e.time}</span>
-          <span className="param">{e.price}</span>
-          {e.sponsored && <span className="param">Реклама</span>}
-        </div>
-        <h2 className="h3" style={{ margin: '12px 0 4px' }}>{e.title}</h2>
-        <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{e.place}</div>
-        <p style={{ fontSize: 13, lineHeight: '17px', margin: '12px 0 0' }}>{e.description}</p>
-        {e.sponsored && (
-          <p style={{ fontSize: 11, lineHeight: '14px', color: 'var(--text-2)', margin: '10px 0 0' }}>
-            Реклама. Рекламодатель и erid указываются здесь по закону о рекламе.
-          </p>
-        )}
+        <EventDetailBody e={e} />
         <div style={{ display: 'grid', gap: 8, marginTop: 18 }}>
           <button className="btn-primary" style={{ gap: 8 }} onClick={() => {
             if (ctx.profile.partnerStatus === 'linked') { onClose(); ctx.toast('Бот отправил приглашение партнёру (демо)'); }
@@ -1425,17 +1470,16 @@ export function Events({ ctx }: { ctx: AppCtx }) {
 
   const list = useMemo(
     () =>
-      EVENTS.filter((e) => e.dayOffset >= wk.todayOffset)
+      EVENTS.filter((e) => e.dayOffset >= wk.todayOffset && e.dayOffset <= 6)
         .filter((e) => (day === 'week' ? true : day === 'today' ? e.dayOffset === wk.todayOffset : e.dayOffset >= 5))
         .filter((e) => cat === 'все' || e.category === cat)
         .sort((a, b) => a.dayOffset - b.dayOffset || a.time.localeCompare(b.time)),
     [day, cat, wk.todayOffset],
   );
   const days = [...new Set(list.map((e) => e.dayOffset))];
-  const picks = EVENTS.filter((e) => e.pick && e.dayOffset >= wk.todayOffset);
+  const picks = EVENTS.filter((e) => e.pick && e.dayOffset >= wk.todayOffset && e.dayOffset <= 6);
   const noFilters = day === 'week' && cat === 'все';
   const reset = () => { setDay('week'); setCat('все'); };
-  const pill = (e: CityEvent) => `${wk.day(e.dayOffset).short.slice(0, 2)} ${e.time}`;
 
   return (
     <div className="screen" style={{ paddingBottom: 130 }}>
@@ -1463,20 +1507,7 @@ export function Events({ ctx }: { ctx: AppCtx }) {
           <>
             <div style={{ ...px, marginTop: 26 }}><h2 className="h2" style={{ margin: 0 }}>Выбор To Date</h2></div>
             <div className="row-scroll" style={{ ...px, marginTop: 14, gap: 10, alignItems: 'flex-start' }}>
-              {picks.map((e) => (
-                <button key={e.id} style={{ flex: '0 0 252px', width: 252, border: 'none', background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpen(e)}>
-                  <div style={{ position: 'relative' }}>
-                    <PhotoStub hue={e.hue} src={e.photo && `./events/${e.photo}.webp`} style={{ width: 252, height: 230, borderRadius: 30 }} />
-                    <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                      <span className="photo-pill">{pill(e)}</span>
-                      <span className="photo-pill">{e.price}</span>
-                      {e.sponsored && <span className="photo-pill">Реклама</span>}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--text-2)', marginTop: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.place}</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, lineHeight: '18px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.title}</div>
-                </button>
-              ))}
+              {picks.map((e) => <EventPick key={e.id} e={e} onClick={() => setOpen(e)} />)}
             </div>
           </>
         )}
@@ -1496,19 +1527,7 @@ export function Events({ ctx }: { ctx: AppCtx }) {
                 {wk.day(dn).short}{dn === wk.todayOffset ? ' · сегодня' : ''}
               </div>
               <div style={{ display: 'grid', gap: 10 }}>
-                {list.filter((e) => e.dayOffset === dn).map((e) => (
-                  <button key={e.id} className="plate" style={{ display: 'flex', gap: 14, alignItems: 'center', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 10 }} onClick={() => setOpen(e)}>
-                    <div style={{ position: 'relative', flex: 'none' }}>
-                      <PhotoStub hue={e.hue} src={e.photo && `./events/${e.photo}.webp`} style={{ width: 100, height: 100, borderRadius: 20 }} />
-                      <span className="photo-pill small" style={{ position: 'absolute', top: 8, left: 8 }}>{e.time}</span>
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, lineHeight: '16px', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 4, lineHeight: '14px' }}>{e.place} · {e.price}</div>
-                      {e.sponsored && <div style={{ fontSize: 10, lineHeight: '12px', color: 'var(--text-2)', marginTop: 4 }}>Реклама</div>}
-                    </div>
-                  </button>
-                ))}
+                {list.filter((e) => e.dayOffset === dn).map((e) => <EventRow key={e.id} e={e} onClick={() => setOpen(e)} />)}
               </div>
             </div>
           ))}
@@ -1759,6 +1778,16 @@ export function LimitSheet({ ctx, onClose, onReset }: { ctx: AppCtx; onClose: ()
 }
 
 /* ================= ЗАМЕТКИ НА ПОЛЯХ ================= */
+export function NoteCard({ n }: { n: { author: string; text: string; contact: string } }) {
+  return (
+    <div className="plate" style={{ padding: '14px 16px' }}>
+      <div style={{ fontWeight: 600, fontSize: 13 }}>{n.author}</div>
+      <div style={{ fontSize: 13, lineHeight: '17px', margin: '4px 0' }}>{n.text}</div>
+      <div style={{ fontSize: 11, color: 'var(--primary-dark)' }}>{n.contact}</div>
+    </div>
+  );
+}
+
 export function Notes({ ctx }: { ctx: AppCtx }) {
   const [text, setText] = useState('');
   const [contact, setContact] = useState('');
@@ -1774,13 +1803,7 @@ export function Notes({ ctx }: { ctx: AppCtx }) {
             Расскажите о себе, своём бизнесе или найдите друзей. Размещение — за символические 99 ₽ на неделю.
           </p>
           <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-            {NOTES.map((n) => (
-              <div key={n.id} className="plate" style={{ padding: '14px 16px' }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{n.author}</div>
-                <div style={{ fontSize: 13, lineHeight: '17px', margin: '4px 0' }}>{n.text}</div>
-                <div style={{ fontSize: 11, color: 'var(--primary-dark)' }}>{n.contact}</div>
-              </div>
-            ))}
+            {NOTES.map((n) => <NoteCard key={n.id} n={n} />)}
           </div>
           <div className="plate" style={{ marginTop: 16, padding: 16, display: 'grid', gap: 10 }}>
             <div className="h3">Оставить заметку</div>
@@ -1791,7 +1814,11 @@ export function Notes({ ctx }: { ctx: AppCtx }) {
               style={{ minHeight: 76, borderRadius: 16, border: '1px solid #B4B5B6', padding: '10px 14px', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', outline: 'none', background: '#fff' }}
             />
             <input className="input" placeholder="Контакт: @telegram или e-mail" value={contact} onChange={(e) => setContact(e.target.value)} />
-            <button className="btn-primary" disabled={!valid} onClick={() => { setText(''); setContact(''); ctx.toast('Заметка отправлена на модерацию (демо)'); }}>
+            <button className="btn-primary" disabled={!valid} onClick={() => {
+              // в демо заметка попадает в очередь админки на этом же устройстве; в боевой версии — на сервер после оплаты
+              ctx.saveAdmin({ ...ctx.admin, notesPending: [...ctx.admin.notesPending, { id: `p${Date.now()}`, author: ctx.profile.name || 'Гость', text: text.trim().slice(0, 400), contact: contact.trim().slice(0, 80) }] });
+              setText(''); setContact(''); ctx.toast('Заметка отправлена на модерацию (демо)');
+            }}>
               Разместить за 99 ₽ — демо
             </button>
           </div>

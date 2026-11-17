@@ -8,12 +8,16 @@ import '@fontsource/inter/cyrillic-500.css'
 import '@fontsource/inter/cyrillic-600.css'
 import './index.css'
 import { initTelegram } from './telegram'
+import { hydrateAdmin } from './store'
 import App from './App.tsx'
 
 initTelegram()
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// правки админки лежат в IndexedDB, читаем их до первого показа, чтобы не мигали старые данные
+hydrateAdmin().finally(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+})

@@ -8,6 +8,8 @@ interface TgWebApp {
   isVersionAtLeast: (v: string) => boolean;
   ready: () => void;
   expand: () => void;
+  isExpanded?: boolean;
+  isFullscreen?: boolean;
   disableVerticalSwipes?: () => void;
   requestFullscreen?: () => void;
   setHeaderColor?: (c: string) => void;
@@ -30,19 +32,32 @@ export const inTelegram = () => tg() !== null;
 
 const BG = '#F5F6F8';
 
-/** Запуск: на весь экран, без закрытия свайпом вниз, цвета шапки под фон приложения */
-export function initTelegram() {
+/** Одна попытка «раскрыть максимально». Безопасно вызывать много раз: уже сделанное повторно не трогаем */
+function expandMax() {
   const w = tg();
   if (!w) return;
   try {
     w.ready();
-    w.expand();
+    if (!w.isExpanded) w.expand();
     if (w.isVersionAtLeast('7.7')) w.disableVerticalSwipes?.();
     // настоящий полный экран есть только на телефонах, на десктопе Telegram это окно и так нужного размера
-    if (w.isVersionAtLeast('8.0') && (w.platform === 'ios' || w.platform === 'android')) w.requestFullscreen?.();
+    if (!w.isFullscreen && w.isVersionAtLeast('8.0') && (w.platform === 'ios' || w.platform === 'android')) w.requestFullscreen?.();
     if (w.isVersionAtLeast('6.1')) { w.setHeaderColor?.(BG); w.setBackgroundColor?.(BG); }
     if (w.isVersionAtLeast('7.10')) w.setBottomBarColor?.(BG);
   } catch { /* старый клиент: просто работаем как обычная страница */ }
+}
+
+/** Запуск: раскрываем сразу, потом ещё несколько раз (клиент иногда не готов в первый момент), и по первому касанию.
+    Если Telegram сам свернул окно, раскрываем снова. */
+export function initTelegram() {
+  const w = tg();
+  if (!w) return;
+  expandMax();
+  window.setTimeout(expandMax, 300);
+  window.setTimeout(expandMax, 1200);
+  window.addEventListener('pointerdown', expandMax, { once: true, passive: true });
+  w.onEvent('viewportChanged', () => { if (!w.isExpanded) w.expand(); });
+  w.onEvent('fullscreenFailed', () => { /* телефон или клиент не поддерживает: остаёмся в раскрытом окне */ });
 }
 
 /** Отступы под кнопки Telegram и вырез экрана, в пикселях окна (0 вне Telegram) */

@@ -17,7 +17,14 @@ export interface Idea {
 }
 
 /** Путь к картинке карточки. Относительный, чтобы работало и на корне домена, и в подпапке */
-export const cardSrc = (name: string) => (name.startsWith('data:') ? name : `./cards/${name}.webp`);
+/* Картинки, загруженные в админке, лежат прямо в данных как data:image. Другие data: (например SVG) не принимаем. */
+const SAFE_DATA = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+export const isDataImg = (name: string) => name.startsWith('data:');
+const safe = (name: string, make: () => string) => (isDataImg(name) ? (SAFE_DATA.test(name) ? name : '') : make());
+export const cardSrc = (name: string) => safe(name, () => `./cards/${name}.webp`);
+export const placeSrc = (name: string) => safe(name, () => `./places/${name}.webp`);
+export const placeThumb = (name: string) => safe(name, () => `./places/${name}-s.webp`);
+export const eventSrc = (name: string) => safe(name, () => `./events/${name}.webp`);
 
 /** Строка приглашения: у нарисованных карточек заголовок продолжает «Давай …», у картинок он уже в повелительном наклонении */
 export const inviteLine = (i: Idea) =>
@@ -84,6 +91,9 @@ export const IDEAS: Idea[] = [
 export interface RoutePoint {
   title: string;
   text: string;
+  /** Координаты точки (ставит админка). Если есть у всех точек маршрута, на карте строится линия */
+  lat?: number;
+  lng?: number;
   /** Фото места: имя файла в public/places без расширения. Пока фото нет — показывается заглушка */
   photo?: string;
   /** Несколько фото места: имена файлов в public/places без расширения (рядом лежит миниатюра `<имя>-s.webp` для карты) */
@@ -105,7 +115,9 @@ export interface CityRoute {
   cover?: string; // обложка маршрута: файл в public/places
 }
 
-export const DISTRICTS = ['Петроградка', 'Васильевский', 'Центральный', 'Коломна'];
+export const BASE_DISTRICTS = ['Петроградка', 'Васильевский', 'Центральный', 'Коломна'];
+
+export const DISTRICTS: string[] = [...BASE_DISTRICTS];
 
 export const ROUTES: CityRoute[] = [
   {
@@ -205,6 +217,10 @@ export interface CityEvent {
   link?: string; // страница партнёра: сайт, телеграм-канал, афиша
   photo?: string; // файл в public/events
   sponsored?: boolean; // рекламное размещение партнёра (по закону нужна пометка «Реклама»)
+  /** Точная дата ГГГГ-ММ-ДД (ставит админка). Если задана, день недели считается от неё */
+  date?: string;
+  advertiser?: string; // рекламодатель для пометки «Реклама»
+  erid?: string; // токен рекламы из ОРД
 }
 
 // Дни привязаны к неделе, поэтому афиша не устаревает; тексты и места — демо
