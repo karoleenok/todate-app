@@ -1,9 +1,9 @@
 // Внешние ссылки: Яндекс Карты и Telegram
 
-// Имя бота без @. Задаётся переменной VITE_BOT_USERNAME при сборке (GitHub → Settings → Variables).
+// Имя бота без @. По умолчанию боевой @tooodate_bot, при необходимости переопределяется переменной VITE_BOT_USERNAME при сборке.
 // Заглушки вроде todate_bot здесь быть не должно: такое имя может принадлежать чужому боту,
 // и тогда намёк уйдёт постороннему человеку.
-export const BOT_USERNAME = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_BOT_USERNAME ?? '').replace(/^@/, '').trim();
+export const BOT_USERNAME = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_BOT_USERNAME || 'tooodate_bot').replace(/^@/, '').trim();
 export const botReady = /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(BOT_USERNAME);
 
 type Pt = { lat: number; lng: number };
