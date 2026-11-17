@@ -199,7 +199,7 @@ export interface CityEvent {
   category: EventCategory;
   description: string;
   hue: number;
-  pick?: boolean; // «выбор недели»
+  pick?: boolean; // «Выбор To Date»
   link?: string; // страница партнёра: сайт, телеграм-канал, афиша
   photo?: string; // файл в public/events
   sponsored?: boolean; // рекламное размещение партнёра (по закону нужна пометка «Реклама»)

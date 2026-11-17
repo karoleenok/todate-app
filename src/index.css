@@ -481,3 +481,9 @@ body {
   flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 600; color: var(--primary); background: #fff; box-shadow: inset 0 0 0 1.5px var(--primary);
 }
+
+/* Точка «есть новые намёки» на иконке навигации */
+.nav-dot {
+  position: absolute; top: 11px; right: 11px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--primary); box-shadow: 0 0 0 2px #fff;
+}

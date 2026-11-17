@@ -193,15 +193,18 @@ export function Header({ onBell, onSearch, solid = false }: { onBell: () => void
 }
 
 /* ---------- Нижняя навигация ---------- */
-export type NavKey = 'home' | 'routes' | 'events' | 'favorites' | 'profile';
-export function BottomNav({ active, go, initial, avatar }: { active: NavKey; go: (k: NavKey) => void; initial: string; avatar?: string }) {
+export type NavKey = 'home' | 'routes' | 'events' | 'hints' | 'profile';
+export function BottomNav({ active, go, initial, avatar, newHints = 0 }: { active: NavKey; go: (k: NavKey) => void; initial: string; avatar?: string; newHints?: number }) {
   return (
     <nav className="navbar" aria-label="Основная навигация">
       <div className="navbar-pill glass">
         <button className={`nav-ic ${active === 'home' ? 'active' : ''}`} onClick={() => go('home')} aria-label="Каталог" title="Каталог"><IconCards /></button>
         <button className={`nav-ic ${active === 'routes' ? 'active' : ''}`} onClick={() => go('routes')} aria-label="Маршруты" title="Маршруты"><IconRoute /></button>
         <button className={`nav-ic ${active === 'events' ? 'active' : ''}`} onClick={() => go('events')} aria-label="Афиша недели" title="Афиша недели"><IconCalendar /></button>
-        <button className={`nav-ic ${active === 'favorites' ? 'active' : ''}`} onClick={() => go('favorites')} aria-label="Избранное" title="Избранное"><IconChatHeart /></button>
+        <button className={`nav-ic ${active === 'hints' ? 'active' : ''}`} onClick={() => go('hints')} aria-label={newHints > 0 ? `Намёки, новых: ${newHints}` : 'Намёки'} title="Намёки" style={{ position: 'relative' }}>
+          <IconChatHeart />
+          {newHints > 0 && <span className="nav-dot" aria-hidden="true" />}
+        </button>
       </div>
       <button className="avatar-fab" onClick={() => go('profile')} aria-label="Профиль">
         <span>{avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}</span>

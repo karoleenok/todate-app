@@ -650,7 +650,7 @@ export function IdeaDetail({ ctx, id }: { ctx: AppCtx; id: string }) {
           </div>
           {idea.description && <p style={{ fontSize: 13, lineHeight: '17px', maxWidth: 330, margin: '10px 0 0' }}>{idea.description}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 22, alignItems: 'center' }}>
-            <button className="btn-primary" style={{ flex: 1, padding: '0 16px' }} onClick={() => ctx.go({ name: 'hint', id: idea.id })}>
+            <button className="btn-primary" style={{ flex: 1, padding: '0 16px' }} onClick={() => ctx.startHint(idea.id)}>
               Намекнуть о свидании
             </button>
             <button
@@ -779,6 +779,9 @@ export function HintForm({ ctx, id }: { ctx: AppCtx; id: string }) {
           <p style={{ fontSize: 13, lineHeight: '17px', color: 'var(--text-2)', marginTop: 0, maxWidth: 330 }}>
             Партнёру придёт идея с локацией, длительностью, метро и примерной стоимостью. А ещё секретный бонус, который не узнаете даже вы.
           </p>
+          {ctx.freeLeft !== null && (
+            <div className="param" style={{ marginTop: 12 }}>Бесплатных намёков: осталось {ctx.freeLeft} из {FREE_HINTS}</div>
+          )}
 
           <div className="plate" style={{ marginTop: 16, padding: '16px 16px 0', overflow: 'hidden' }}>
             <div style={{ fontSize: 11, color: 'var(--text-2)' }}>Что отправляем:</div>
@@ -901,7 +904,7 @@ export function HintSent({ ctx, id }: { ctx: AppCtx; id: string }) {
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
-            <button className="btn-primary" style={{ height: 46, padding: '0 10px' }} onClick={() => ctx.go({ name: 'hints' })}>Мои намёки</button>
+            <button className="btn-primary" style={{ height: 46, padding: '0 10px' }} onClick={() => ctx.go({ name: 'hints', id: 'out' })}>Мои намёки</button>
             <button className="btn-ghost" onClick={() => ctx.go({ name: 'home' })}>В каталог</button>
           </div>
           {viaTg && (
@@ -946,9 +949,14 @@ export function HintView({ ctx, id }: { ctx: AppCtx; id: string }) {
         </div>
         <div style={{ marginTop: 10 }}><SingleCard idea={idea} height={250} /></div>
         <div style={{ ...px, marginTop: 18 }}>
-          <div className="plate" style={{ padding: '14px 16px' }}>
-            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: '18px' }}>{idea.title}</div>
-            <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--text-2)', marginTop: 6 }}>Время: {idea.duration} · Цена: {idea.price}</div>
+          <div className="row-scroll" style={{ justifyContent: 'center' }}>
+            <span className="param">{idea.duration}</span>
+            <span className="param">{idea.price}</span>
+            {idea.metro && <span className="param">{idea.metro}</span>}
+          </div>
+          <div className="plate" style={{ padding: '14px 16px', marginTop: 12 }}>
+            <div style={{ fontSize: 11, lineHeight: '14px', color: 'var(--text-2)' }}>Идея</div>
+            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: '18px', marginTop: 4 }}>{idea.title}</div>
           </div>
           {hint.secret && (
             <div style={{ marginTop: 12, padding: '14px 16px', borderRadius: 20, border: '2px solid var(--text)', background: '#fff' }}>
@@ -974,11 +982,12 @@ export function HintView({ ctx, id }: { ctx: AppCtx; id: string }) {
 }
 
 /* ================= МОИ НАМЁКИ ================= */
-export function MyHints({ ctx }: { ctx: AppCtx }) {
+export function MyHints({ ctx, id }: { ctx: AppCtx; id?: string }) {
   const valid = ctx.hints.filter((h) => IDEAS.some((i) => i.id === h.ideaId));
   const incoming = valid.filter((h) => h.dir === 'in');
   const outgoing = valid.filter((h) => h.dir !== 'in');
-  const [tab, setTab] = useState<'in' | 'out'>(incoming.some((h) => h.status === 'отправлен') ? 'in' : 'out');
+  // «Мне» идёт первой. После отправки своего намёка открываем «От меня»
+  const [tab, setTab] = useState<'in' | 'out'>(id === 'out' || incoming.length === 0 ? 'out' : 'in');
   const list = tab === 'in' ? incoming : outgoing;
   const newCount = incoming.filter((h) => h.status === 'отправлен').length;
   return (
@@ -989,10 +998,10 @@ export function MyHints({ ctx }: { ctx: AppCtx }) {
         <div style={px}>
           <h1 className="h1" style={{ margin: 0 }}>Мои намёки</h1>
           <div className="row-scroll" style={{ marginTop: 14 }} role="tablist">
-            <button role="tab" aria-selected={tab === 'out'} className={`chip ${tab === 'out' ? 'active' : ''}`} onClick={() => setTab('out')}>От меня</button>
             <button role="tab" aria-selected={tab === 'in'} className={`chip ${tab === 'in' ? 'active' : ''}`} onClick={() => setTab('in')}>
               Мне{newCount > 0 ? ` · ${newCount}` : ''}
             </button>
+            <button role="tab" aria-selected={tab === 'out'} className={`chip ${tab === 'out' ? 'active' : ''}`} onClick={() => setTab('out')}>От меня</button>
           </div>
         </div>
         <div style={{ ...pxList, marginTop: 16 }}>
@@ -1356,7 +1365,7 @@ export function RouteDetail({ ctx, id }: { ctx: AppCtx; id: string }) {
         </div>
         <div style={px}>
           <div style={{ display: 'flex', gap: 8, marginTop: 20, alignItems: 'center' }}>
-            <button className="btn-primary" style={{ flex: 1, padding: '0 16px' }} onClick={() => ctx.go({ name: 'hint', id: IDEAS[0].id })}>Намекнуть о свидании</button>
+            <button className="btn-primary" style={{ flex: 1, padding: '0 16px' }} onClick={() => ctx.startHint(IDEAS[0].id)}>Намекнуть о свидании</button>
             <button className={`round-icon-btn ${ctx.favorites.includes(route.id) ? 'liked' : ''}`} onClick={() => ctx.toggleFavorite(route.id)} aria-label="В избранное"><IconHeart filled={ctx.favorites.includes(route.id)} /></button>
             <button className="round-icon-btn" onClick={() => ctx.toast('Ссылка скопирована')} aria-label="Поделиться"><IconShare /></button>
           </div>
@@ -1455,7 +1464,7 @@ export function Events({ ctx }: { ctx: AppCtx }) {
 
         {noFilters && picks.length > 0 && (
           <>
-            <div style={{ ...px, marginTop: 26 }}><h2 className="h2" style={{ margin: 0 }}>Выбор недели</h2></div>
+            <div style={{ ...px, marginTop: 26 }}><h2 className="h2" style={{ margin: 0 }}>Выбор To Date</h2></div>
             <div className="row-scroll" style={{ ...px, marginTop: 14, gap: 10, alignItems: 'flex-start' }}>
               {picks.map((e) => (
                 <button key={e.id} style={{ flex: '0 0 252px', width: 252, border: 'none', background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer' }} onClick={() => setOpen(e)}>
@@ -1687,6 +1696,62 @@ export function Paywall({ ctx }: { ctx: AppCtx }) {
           </p>
         </div>
         <div style={{ height: 40 }} />
+      </div>
+    </div>
+  );
+}
+
+/* ================= БЕСПЛАТНЫЕ НАМЁКИ ЗАКОНЧИЛИСЬ ================= */
+// Два бонусных намёка даём без подписки. На третьем нажатии «Намекнуть» открывается эта шторка
+export const FREE_HINTS = 2;
+
+export function LimitSheet({ ctx, onClose, onReset }: { ctx: AppCtx; onClose: () => void; onReset: () => void }) {
+  const [plan, setPlan] = useState('month');
+  const chosen = PLANS.find((p) => p.id === plan)!;
+  const perks = ['Намёки партнёру без ограничений', 'Все 70 карточек и новые каждую неделю', 'Маршруты и афиша недели'];
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="limit-title">
+      <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" style={{ position: 'static', margin: '6px auto 14px' }} />
+        <div id="limit-title" className="h3" style={{ margin: '0 0 8px' }}>Два бесплатных намёка закончились</div>
+        <p style={{ fontSize: 13, lineHeight: '17px', margin: 0 }}>
+          Вы отправили оба бонусных намёка. Чтобы свиданий в вашей жизни становилось больше, оформите подписку.
+        </p>
+        <div style={{ display: 'grid', gap: 8, margin: '14px 0 0', padding: 0 }}>
+          {perks.map((t) => (
+            <div key={t} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13, lineHeight: '17px' }}>
+              <span style={{ color: 'var(--primary)', display: 'inline-flex', flex: 'none' }}><IconCheck /></span>{t}
+            </div>
+          ))}
+        </div>
+        <div role="radiogroup" aria-label="Срок подписки" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 18 }}>
+          {PLANS.map((p) => {
+            const on = plan === p.id;
+            return (
+              <button
+                key={p.id} role="radio" aria-checked={on} onClick={() => setPlan(p.id)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  minHeight: 72, padding: '10px 4px', borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit',
+                  border: `2px solid ${on ? 'var(--primary)' : 'var(--line, #D9DDE5)'}`,
+                  background: on ? 'var(--primary)' : '#fff', color: on ? '#fff' : 'var(--text)',
+                }}
+              >
+                <span style={{ fontSize: 12, lineHeight: '14px' }}>{p.title}</span>
+                <span className="font-head" style={{ fontSize: 22, lineHeight: '22px', whiteSpace: 'nowrap' }}>{p.price}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
+          <button className="btn-primary" onClick={() => { ctx.subscribe(chosen.days); onClose(); ctx.toast('Подписка активна (демо)'); }}>
+            Оформить за {chosen.price}
+          </button>
+          <button className="btn-ghost" onClick={onClose}>Не сейчас</button>
+          <button className="link-btn" style={{ justifyContent: 'center', color: 'var(--text-2)', fontWeight: 500, fontSize: 12 }} onClick={onReset}>
+            Только в прототипе: вернуть бесплатные намёки
+          </button>
+        </div>
       </div>
     </div>
   );

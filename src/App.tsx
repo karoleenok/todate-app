@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Header, BottomNav, type NavKey, IconBell } from './ui';
 import { weekInfo } from './links';
-import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, HintView, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes } from './screens';
+import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, HintView, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes, LimitSheet, FREE_HINTS } from './screens';
 
 export type RouteName =
   | 'auth' | 'invite' | 'accept' | 'home' | 'idea' | 'hint' | 'hint-sent' | 'hint-view' | 'hints'
@@ -21,6 +21,10 @@ export interface AppCtx {
   hints: Hint[];
   markHeard: (id: string) => void;
   sendHint: (ideaId: string, from: string, to: string) => void;
+  /** Открыть форму намёка или, если бесплатные закончились, показать шторку с подпиской */
+  startHint: (ideaId: string) => void;
+  /** Сколько бесплатных намёков осталось (null — подписка, лимита нет) */
+  freeLeft: number | null;
   subscribed: number;
   subscribe: (days: number) => void;
   profile: Profile;
@@ -57,6 +61,8 @@ export default function App() {
       { id: 'h2', ideaId: 'ciao-kaiju', from: 'Каролина', to: 'matvey@example.com', date: '15.11.2026', status: 'отправлен' },
     ]),
   );
+  const [freeUsed, setFreeUsed] = useState<number>(() => load('td_free_used', 0));
+  const [limitOpen, setLimitOpen] = useState(false);
   const [subscribed, setSubscribed] = useState<number>(() => load('td_sub', 0));
   const [profile, setProfile] = useState<Profile>(() => ({ avatar: './avatar.webp', ...load<Profile>('td_profile', { name: 'Каролина', email: 'karolina@example.com' }) }));
   const [registered, setRegistered] = useState<boolean>(() => load('td_registered', false));
@@ -79,6 +85,7 @@ export default function App() {
 
   useEffect(() => { localStorage.setItem('td_favs', JSON.stringify(favorites)); }, [favorites]);
   useEffect(() => { localStorage.setItem('td_hints', JSON.stringify(hints)); }, [hints]);
+  useEffect(() => { localStorage.setItem('td_free_used', JSON.stringify(freeUsed)); }, [freeUsed]);
   useEffect(() => { localStorage.setItem('td_sub', JSON.stringify(subscribed)); }, [subscribed]);
   useEffect(() => { localStorage.setItem('td_profile', JSON.stringify(profile)); }, [profile]);
   useEffect(() => { localStorage.setItem('td_registered', JSON.stringify(registered)); }, [registered]);
@@ -129,10 +136,18 @@ export default function App() {
     toggleFavorite: (id) => setFavorites((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id])),
     hints,
     markHeard: (id) => setHints((hs) => hs.map((h) => (h.id === id ? { ...h, status: 'услышан' } : h))),
-    sendHint: (ideaId, from, to) => setHints((hs) => [
-      { id: `h${Date.now()}`, ideaId, from, to, date: new Date().toLocaleDateString('ru-RU'), status: 'отправлен' },
-      ...hs,
-    ]),
+    sendHint: (ideaId, from, to) => {
+      if (subscribed <= 0) setFreeUsed((n) => n + 1);
+      setHints((hs) => [
+        { id: `h${Date.now()}`, ideaId, from, to, date: new Date().toLocaleDateString('ru-RU'), status: 'отправлен' },
+        ...hs,
+      ]);
+    },
+    freeLeft: subscribed > 0 ? null : Math.max(0, FREE_HINTS - freeUsed),
+    startHint: (ideaId) => {
+      if (subscribed > 0 || freeUsed < FREE_HINTS) go({ name: 'hint', id: ideaId });
+      else setLimitOpen(true);
+    },
     subscribed,
     subscribe: (days) => setSubscribed(days),
     profile, setProfile,
@@ -140,13 +155,13 @@ export default function App() {
     register: (name, email) => { setProfile({ name, email }); setRegistered(true); },
     invitePartner: (email) => setProfile((p) => ({ ...p, partner: email })),
     toast,
-  }), [go, back, favorites, hints, subscribed, profile, registered, toast]);
+  }), [go, back, favorites, hints, subscribed, freeUsed, profile, registered, toast]);
 
   const navActive: NavKey =
-    route.name === 'home' || route.name === 'idea' || route.name === 'hint' || route.name === 'hint-sent' || route.name === 'hint-view' ? 'home'
+    route.name === 'home' || route.name === 'idea' || route.name === 'hint' || route.name === 'hint-sent' || route.name === 'favorites' ? 'home'
+    : route.name === 'hints' || route.name === 'hint-view' ? 'hints'
     : route.name === 'routes' || route.name === 'route' ? 'routes'
     : route.name === 'events' ? 'events'
-    : route.name === 'favorites' ? 'favorites'
     : 'profile';
 
   const showNav = route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept';
@@ -154,7 +169,7 @@ export default function App() {
     k === 'home' ? go({ name: 'home' })
     : k === 'routes' ? go({ name: 'routes' })
     : k === 'events' ? go({ name: 'events' })
-    : k === 'favorites' ? go({ name: 'favorites' })
+    : k === 'hints' ? go({ name: 'hints' })
     : go({ name: 'profile' });
 
   return (
@@ -170,7 +185,7 @@ export default function App() {
       {route.name === 'hint' && <HintForm ctx={ctx} id={route.id!} />}
       {route.name === 'hint-sent' && <HintSent ctx={ctx} id={route.id!} />}
       {route.name === 'hint-view' && <HintView ctx={ctx} id={route.id!} />}
-      {route.name === 'hints' && <MyHints ctx={ctx} />}
+      {route.name === 'hints' && <MyHints ctx={ctx} id={route.id} />}
       {route.name === 'favorites' && <Favorites ctx={ctx} />}
       {route.name === 'routes' && <Routes ctx={ctx} />}
       {route.name === 'route' && <RouteDetail ctx={ctx} id={route.id!} />}
@@ -183,7 +198,7 @@ export default function App() {
       {showNav && (
         <>
           <div className="fade-bottom" />
-          <BottomNav active={navActive} go={goNav} initial={profile.name.charAt(0).toUpperCase()} avatar={profile.avatar} />
+          <BottomNav active={navActive} go={goNav} initial={profile.name.charAt(0).toUpperCase()} avatar={profile.avatar} newHints={hints.filter((h) => h.dir === 'in' && h.status === 'отправлен').length} />
         </>
       )}
 
@@ -236,6 +251,15 @@ export default function App() {
             <button className="btn-primary" style={{ width: '100%', marginTop: 18 }} onClick={closeWeek}>Понятно</button>
           </div>
         </div>
+      )}
+
+      {/* Бесплатные намёки закончились */}
+      {limitOpen && (
+        <LimitSheet
+          ctx={ctx}
+          onClose={() => setLimitOpen(false)}
+          onReset={() => { setFreeUsed(0); setLimitOpen(false); toast('Демо: бесплатные намёки вернулись'); }}
+        />
       )}
 
       {/* Поиск */}
