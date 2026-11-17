@@ -50,9 +50,11 @@ body {
 }
 
 /* Телефонная колонка: холст как в макете 390×844, масштабируется зумом под экран */
+.stage { display: flex; justify-content: center; min-height: 100dvh; background: var(--bg); }
 .phone {
   width: 390px;
-  margin: 0 auto;
+  margin: 0;
+  flex: none;
   min-height: 100dvh;
   background: var(--bg);
   position: relative;
@@ -82,8 +84,8 @@ body {
 }
 
 @keyframes deckIn {
-  from { transform: rotate(-3deg) scale(0.92); opacity: 0.4; }
-  to { transform: rotate(-3deg) scale(1); opacity: 1; }
+  from { transform: rotate(-3deg) scale(0.94); }
+  to { transform: rotate(-3deg) scale(1); }
 }
 
 .sheet {
@@ -256,6 +258,22 @@ body {
 .deck-card.cat-отдых { background: var(--yellow); }
 .deck-card.cat-релакс { background: var(--lav-deep); }
 
+/* Карточка-картинка: углы уже скруглены в самом WebP, поэтому фон, радиус и тень контейнера не нужны.
+   drop-shadow учитывает прозрачные углы, box-shadow дал бы квадратную тень. */
+.deck-card.img, .tile.tile-img {
+  background: transparent !important;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  filter: drop-shadow(0 10px 18px rgba(48, 8, 9, 0.12));
+}
+.tile.tile-img { aspect-ratio: 795 / 1365; }
+.card-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; object-fit: fill;
+  pointer-events: none; user-select: none; -webkit-user-drag: none;
+}
+
 /* Плашки списков */
 .plate {
   background: var(--bg); border-radius: var(--r-plate); padding: 10px;
@@ -280,7 +298,7 @@ body {
 }
 .navbar-pill {
   pointer-events: auto;
-  width: 160px; height: 60px; border-radius: 999px;
+  width: 212px; height: 60px; border-radius: 999px;
   display: flex; align-items: center; justify-content: space-evenly;
 }
 .nav-ic {
@@ -349,4 +367,117 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------- Шапка и стеклянная плашка под ней ---------- */
+.app-header {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: 390px; max-width: 100%; z-index: 35;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 20px 0; pointer-events: none;
+}
+.app-header-glass {
+  position: absolute; left: 0; right: 0; top: 0; height: 84px; z-index: -1;
+  border-radius: 0 0 28px 28px;
+  background: rgba(245, 246, 248, 0.58);
+  -webkit-backdrop-filter: blur(20px) saturate(1.7);
+  backdrop-filter: blur(20px) saturate(1.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 6px 24px rgba(20, 30, 60, 0.08);
+  opacity: 0; transition: opacity .2s ease;
+}
+.app-header-glass.on { opacity: 1; }
+
+/* ---------- Закрытая плитка ---------- */
+.tile-locked { cursor: default; container-type: inline-size; background: none; }
+.tile-locked-in {
+  position: absolute; inset: 0; border-radius: 12px; border-radius: 7.5cqw;
+  background: linear-gradient(165deg, rgba(112, 156, 221, 0.20), rgba(146, 154, 223, 0.30));
+  border: 1px dashed rgba(112, 156, 221, 0.55);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  color: var(--text-2);
+}
+.lock-badge {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center; color: var(--primary-dark);
+  box-shadow: 0 4px 16px rgba(20, 30, 60, 0.08);
+}
+.lock-text { font-size: 13px; line-height: 16px; font-weight: 600; text-align: center; padding: 0 12px; }
+
+/* ---------- Переворот карточки колоды ---------- */
+.flip-card { perspective: 1100px; }
+.flip-inner {
+  position: absolute; inset: 0; transform-style: preserve-3d; -webkit-transform-style: preserve-3d;
+  transition: transform .65s cubic-bezier(.3, .8, .25, 1);
+}
+.flip-inner.flipped { transform: rotateY(180deg); }
+.flip-face {
+  position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+}
+.flip-face.back { transform: rotateY(180deg); }
+
+/* ---------- Карта ---------- */
+.street-map { position: relative; background: #E9ECF1; overflow: hidden; isolation: isolate; z-index: 0; }
+.street-map .leaflet-container { background: #E9ECF1; font-family: var(--font-body); outline: none; }
+.map-pin {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--primary-dark); color: #fff; border: 2px solid #fff;
+  display: flex; align-items: center; justify-content: center;
+  font: 600 13px/1 var(--font-body);
+  box-shadow: 0 3px 10px rgba(20, 30, 60, 0.28);
+  transition: transform .15s ease, background .15s ease;
+}
+.map-pin.approx { background: #fff; color: var(--primary-dark); border: 2px dashed var(--primary-dark); }
+.map-pin.photo {
+  background-color: #E9ECF1; background-size: cover; background-position: center;
+  border: 3px solid #fff; position: relative; box-sizing: border-box;
+}
+.map-pin.photo .pin-num {
+  position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 9px; background: var(--primary-dark); color: #fff; border: 2px solid #fff;
+  font: 600 10px/14px var(--font-body); text-align: center;
+}
+.map-pin.photo.route-pin .pin-num { display: none; }
+/* Место, где точка поставлена примерно: пунктирный контур вокруг фото */
+.map-pin.photo.approx { border: 3px dashed var(--primary-dark); background-color: #fff; }
+.map-pin.photo.active { transform: scale(1.18); border: 3px solid var(--primary-dark); }
+.map-pin.active { transform: scale(1.25); background: var(--text); color: #fff; border: 2px solid #fff; }
+.map-pin.route-pin { width: 22px; height: 22px; background: var(--primary); }
+.map-attr {
+  position: absolute; left: 8px; bottom: 52px; z-index: 500;
+  font-size: 9px; line-height: 11px; color: var(--text-2);
+  background: rgba(255, 255, 255, 0.7); padding: 2px 6px; border-radius: 6px;
+}
+.map-attr a { color: inherit; }
+
+/* Кнопки масштаба карты в стиле приложения */
+.street-map .leaflet-bar { border: none; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 18px rgba(20, 30, 60, 0.14); }
+.street-map .leaflet-bar a {
+  width: 38px; height: 38px; line-height: 38px; font-size: 20px; color: var(--icon);
+  background: rgba(255, 255, 255, 0.82); border-bottom: 1px solid var(--divider);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.street-map .leaflet-bar a:last-child { border-bottom: none; }
+.street-map .leaflet-bottom.leaflet-right { bottom: 56px; }
+.street-map .leaflet-right .leaflet-control { margin-right: 14px; }
+
+/* Кнопка «Подробнее» на перевёрнутой карточке колоды */
+.deck-open {
+  position: absolute; top: 16px; right: 12px; z-index: 6; width: 40px; height: 40px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer;
+  color: var(--text); background: rgba(255, 255, 255, 0.82); border: 1px solid rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgba(20, 30, 60, 0.18);
+}
+.deck-open svg { width: 16px; height: 16px; }
+.link-btn {
+  background: none; border: none; padding: 8px 6px; margin: 0; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--primary); display: inline-flex; align-items: center; gap: 6px;
+}
+.link-btn svg { width: 16px; height: 16px; }
+.step-dot {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--primary); background: #fff; box-shadow: inset 0 0 0 1.5px var(--primary);
 }

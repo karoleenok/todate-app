@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Category } from './data';
+import { cardSrc, categoryLabel, type Category } from './data';
 
 /* ---------- Иконки (SVG, 22px) ---------- */
 const ic = (d: React.ReactNode) => (
@@ -32,6 +32,8 @@ export const IconLang = () => ic(<><circle cx="12" cy="12" r="9" /><path d="M3 1
 export const IconSliders = () => ic(<><path d="M4 8h10M18 8h2M4 16h4M12 16h8" /><circle cx="16" cy="8" r="2" /><circle cx="10" cy="16" r="2" /></>);
 export const IconChat = () => ic(<><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.2-1L3 20l1-5.3A8.5 8.5 0 1 1 21 11.5z" /></>);
 export const IconCrown = () => ic(<><path d="m3 8 4.5 3L12 5l4.5 6L21 8l-1.5 10h-15L3 8z" /></>);
+export const IconSend = () => ic(<><path d="M21 3 10 14" /><path d="m21 3-7 18-4-7-7-4 18-7z" /></>);
+export const IconPin = () => ic(<><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></>);
 export const IconBack = () => ic(<path d="m15 6-6 6 6 6" />);
 
 /* ---------- Логотип (вектор из макета) ---------- */
@@ -165,41 +167,72 @@ export const cardShapeColor: Record<Category, string> = {
 };
 
 export const catClass = (c: Category) => `cat-${c}`;
-export const catLabel = (c: Category) => c[0].toUpperCase() + c.slice(1);
+export const catLabel = (c: Category) => categoryLabel(c);
 
 /* ---------- Шапка (всегда зафиксирована сверху) ---------- */
-export function Header({ onBell, onSearch }: { onBell: () => void; onSearch: () => void }) {
+export function Header({ onBell, onSearch, solid = false }: { onBell: () => void; onSearch: () => void; solid?: boolean }) {
+  // При прокрутке под шапкой появляется стеклянная плашка, чтобы логотип и кнопки не сливались с контентом
+  const [scrolled, setScrolled] = React.useState(false);
+  React.useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 6);
+    on();
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
   return (
-    <div style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: 390, maxWidth: '100%', zIndex: 35, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 0', pointerEvents: 'none' }}>
+    <div className="app-header">
+      <div className={`app-header-glass ${scrolled || solid ? 'on' : ''}`} aria-hidden="true" />
       <button className="circle-btn glass" onClick={onBell} aria-label="Уведомления" style={{ position: 'relative', pointerEvents: 'auto' }}>
         <IconBell />
         <span style={{ position: 'absolute', top: 10, right: 12, width: 9, height: 9, borderRadius: '50%', background: 'var(--primary)', border: '2px solid var(--surface)' }} />
       </button>
-      <div style={{ paddingTop: 4 }}><Logo /></div>
+      <div style={{ paddingTop: 4, position: 'relative' }}><Logo /></div>
       <button className="circle-btn glass" onClick={onSearch} aria-label="Поиск" style={{ pointerEvents: 'auto' }}><IconSearch /></button>
     </div>
   );
 }
 
 /* ---------- Нижняя навигация ---------- */
-export type NavKey = 'home' | 'routes' | 'favorites' | 'profile';
-export function BottomNav({ active, go, initial }: { active: NavKey; go: (k: NavKey) => void; initial: string }) {
+export type NavKey = 'home' | 'routes' | 'events' | 'favorites' | 'profile';
+export function BottomNav({ active, go, initial, avatar }: { active: NavKey; go: (k: NavKey) => void; initial: string; avatar?: string }) {
   return (
     <nav className="navbar" aria-label="Основная навигация">
       <div className="navbar-pill glass">
         <button className={`nav-ic ${active === 'home' ? 'active' : ''}`} onClick={() => go('home')} aria-label="Каталог" title="Каталог"><IconCards /></button>
         <button className={`nav-ic ${active === 'routes' ? 'active' : ''}`} onClick={() => go('routes')} aria-label="Маршруты" title="Маршруты"><IconRoute /></button>
+        <button className={`nav-ic ${active === 'events' ? 'active' : ''}`} onClick={() => go('events')} aria-label="Афиша недели" title="Афиша недели"><IconCalendar /></button>
         <button className={`nav-ic ${active === 'favorites' ? 'active' : ''}`} onClick={() => go('favorites')} aria-label="Избранное" title="Избранное"><IconChatHeart /></button>
       </div>
       <button className="avatar-fab" onClick={() => go('profile')} aria-label="Профиль">
-        <span>{initial}</span>
+        <span>{avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}</span>
       </button>
     </nav>
   );
 }
 
+/* ---------- Закрытая плитка: карточки этой недели ещё не открыты ---------- */
+export const IconLock = () => ic(<><rect x="5" y="11" width="14" height="9" rx="2.5" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>);
+export function LockedTile() {
+  return (
+    <div className="tile tile-locked" role="img" aria-label="Карточка пока не открыта">
+      <div className="tile-locked-in">
+        <span className="lock-badge"><IconLock /></span>
+        <span className="lock-text">пока не открыто</span>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Плитка идеи ---------- */
-export function IdeaTile({ idea, onClick }: { idea: { id: string; title: string; category: Category; shape: string }; onClick: () => void }) {
+export function IdeaTile({ idea, onClick }: { idea: { id: string; title: string; category: Category; shape: string; image?: string }; onClick: () => void }) {
+  if (idea.image) {
+    // Плитка-картинка: вся карточка уже нарисована, чип категории и подпись не нужны
+    return (
+      <button className="tile tile-img" onClick={onClick} aria-label={idea.title}>
+        <img className="card-img" src={cardSrc(idea.image)} alt="" width={795} height={1365} loading="lazy" decoding="async" draggable={false} />
+      </button>
+    );
+  }
   return (
     <button className={`tile ${catClass(idea.category)}`} onClick={onClick}>
       <Silhouette shape={tileShape[idea.category]} color={tileShapeColor[idea.category]} />
@@ -210,19 +243,18 @@ export function IdeaTile({ idea, onClick }: { idea: { id: string; title: string;
 }
 
 /* ---------- «Фото»-заглушка с градиентом ---------- */
-export function PhotoStub({ hue, className = '', style = {} }: { hue: number; className?: string; style?: React.CSSProperties }) {
+// Пока нет фото — спокойная заливка фирменным розовым или голубым; тон зависит от hue, чтобы соседние плитки чередовались
+export function PhotoStub({ hue, src, className = '', style = {} }: { hue: number; src?: string; className?: string; style?: React.CSSProperties }) {
+  const pink = Math.round(hue / 30) % 2 === 0;
+  if (src) {
+    return <img src={src} alt="" loading="lazy" className={className} style={{ objectFit: 'cover', display: 'block', background: '#E9ECF1', ...style }} />;
+  }
   return (
     <div
       className={className}
       aria-hidden="true"
-      style={{
-        background: `linear-gradient(160deg, hsl(${hue} 45% 62%) 0%, hsl(${(hue + 40) % 360} 40% 40%) 55%, hsl(${(hue + 70) % 360} 35% 28%) 100%)`,
-        position: 'relative', overflow: 'hidden',
-        ...style,
-      }}
-    >
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(120% 90% at 20% 10%, rgba(255,255,255,.35), transparent 55%)' }} />
-    </div>
+      style={{ background: pink ? '#F6B3E3' : '#8FB2E8', position: 'relative', overflow: 'hidden', ...style }}
+    />
   );
 }
 

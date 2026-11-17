@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Header, BottomNav, type NavKey, IconBell } from './ui';
-import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes } from './screens';
+import { weekInfo } from './links';
+import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, HintView, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes } from './screens';
 
 export type RouteName =
-  | 'auth' | 'invite' | 'accept' | 'home' | 'idea' | 'hint' | 'hint-sent' | 'hints'
+  | 'auth' | 'invite' | 'accept' | 'home' | 'idea' | 'hint' | 'hint-sent' | 'hint-view' | 'hints'
   | 'favorites' | 'routes' | 'route' | 'events' | 'profile' | 'account' | 'paywall' | 'notes';
 
 export interface Route { name: RouteName; id?: string }
 
-export interface Hint { id: string; ideaId: string; from: string; to: string; date: string; status: 'отправлен' | 'услышан' }
+export interface Hint { id: string; ideaId: string; from: string; to: string; date: string; status: 'отправлен' | 'услышан'; dir?: 'in'; secret?: string }
+
+export interface Profile { name: string; email: string; partner?: string; avatar?: string; partnerStatus?: 'invited' | 'linked'; partnerName?: string }
 
 export interface AppCtx {
   go: (r: Route) => void;
@@ -16,11 +19,12 @@ export interface AppCtx {
   favorites: string[];
   toggleFavorite: (id: string) => void;
   hints: Hint[];
+  markHeard: (id: string) => void;
   sendHint: (ideaId: string, from: string, to: string) => void;
   subscribed: number;
   subscribe: (days: number) => void;
-  profile: { name: string; email: string; partner?: string };
-  setProfile: (p: { name: string; email: string; partner?: string }) => void;
+  profile: Profile;
+  setProfile: (p: Profile) => void;
   registered: boolean;
   register: (name: string, email: string) => void;
   invitePartner: (email: string) => void;
@@ -37,7 +41,7 @@ function load<T>(key: string, fallback: T): T {
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const names: RouteName[] = ['auth', 'invite', 'accept', 'home', 'idea', 'hint', 'hint-sent', 'hints', 'favorites', 'routes', 'route', 'events', 'profile', 'account', 'paywall', 'notes'];
+  const names: RouteName[] = ['auth', 'invite', 'accept', 'home', 'idea', 'hint', 'hint-sent', 'hint-view', 'hints', 'favorites', 'routes', 'route', 'events', 'profile', 'account', 'paywall', 'notes'];
   if (names.includes(name as RouteName)) return { name: name as RouteName, id };
   return { name: 'home' };
 }
@@ -45,19 +49,33 @@ function routeFromHash(): Route {
 export default function App() {
   const [route, setRoute] = useState<Route>(() => routeFromHash());
   const historyRef = useRef<Route[]>([]);
-  const [favorites, setFavorites] = useState<string[]>(() => load('td_favs', ['katok', 'spa']));
+  const [favorites, setFavorites] = useState<string[]>(() => load('td_favs', ['ciao-kaiju', 'geocaching']));
   const [hints, setHints] = useState<Hint[]>(() =>
     load('td_hints', [
-      { id: 'h1', ideaId: 'desert-tur', from: 'Каролина', to: 'timur@example.com', date: '20.10.2026', status: 'услышан' },
-      { id: 'h2', ideaId: 'molot-vedm', from: 'Каролина', to: 'timur@example.com', date: '02.11.2026', status: 'отправлен' },
+      { id: 'h-in1', ideaId: 'ciao-kaiju', from: 'Матвей', to: 'Каролина', dir: 'in', date: '16.11.2026', status: 'отправлен', secret: 'Демо-сюрприз из админки: после ужина я приготовил для тебя маленький подарок, он лежит у меня в рюкзаке.' },
+      { id: 'h1', ideaId: 'naedine', from: 'Каролина', to: 'matvey@example.com', date: '10.11.2026', status: 'услышан' },
+      { id: 'h2', ideaId: 'ciao-kaiju', from: 'Каролина', to: 'matvey@example.com', date: '15.11.2026', status: 'отправлен' },
     ]),
   );
   const [subscribed, setSubscribed] = useState<number>(() => load('td_sub', 0));
-  const [profile, setProfile] = useState(() => load('td_profile', { name: 'Каролина', email: 'karolina@example.com' }));
+  const [profile, setProfile] = useState<Profile>(() => ({ avatar: './avatar.webp', ...load<Profile>('td_profile', { name: 'Каролина', email: 'karolina@example.com' }) }));
   const [registered, setRegistered] = useState<boolean>(() => load('td_registered', false));
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
+  const wk = useMemo(() => weekInfo(), []);
+  const [weekOpen, setWeekOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  // Первый заход за неделю: напоминаем, что карточки обновляются раз в неделю
+  useEffect(() => {
+    if (route.name !== 'home') return;
+    let seen = '';
+    try { seen = localStorage.getItem('td_week_seen') ?? ''; } catch { /* ignore */ }
+    if (seen === wk.key) return;
+    const t = window.setTimeout(() => setWeekOpen(true), 500);
+    return () => window.clearTimeout(t);
+  }, [route.name, wk.key]);
+  const closeWeek = () => { setWeekOpen(false); try { localStorage.setItem('td_week_seen', wk.key); } catch { /* ignore */ } };
 
   useEffect(() => { localStorage.setItem('td_favs', JSON.stringify(favorites)); }, [favorites]);
   useEffect(() => { localStorage.setItem('td_hints', JSON.stringify(hints)); }, [hints]);
@@ -110,6 +128,7 @@ export default function App() {
     favorites,
     toggleFavorite: (id) => setFavorites((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id])),
     hints,
+    markHeard: (id) => setHints((hs) => hs.map((h) => (h.id === id ? { ...h, status: 'услышан' } : h))),
     sendHint: (ideaId, from, to) => setHints((hs) => [
       { id: `h${Date.now()}`, ideaId, from, to, date: new Date().toLocaleDateString('ru-RU'), status: 'отправлен' },
       ...hs,
@@ -124,8 +143,9 @@ export default function App() {
   }), [go, back, favorites, hints, subscribed, profile, registered, toast]);
 
   const navActive: NavKey =
-    route.name === 'home' || route.name === 'idea' || route.name === 'hint' || route.name === 'hint-sent' ? 'home'
+    route.name === 'home' || route.name === 'idea' || route.name === 'hint' || route.name === 'hint-sent' || route.name === 'hint-view' ? 'home'
     : route.name === 'routes' || route.name === 'route' ? 'routes'
+    : route.name === 'events' ? 'events'
     : route.name === 'favorites' ? 'favorites'
     : 'profile';
 
@@ -133,12 +153,14 @@ export default function App() {
   const goNav = (k: NavKey) =>
     k === 'home' ? go({ name: 'home' })
     : k === 'routes' ? go({ name: 'routes' })
+    : k === 'events' ? go({ name: 'events' })
     : k === 'favorites' ? go({ name: 'favorites' })
     : go({ name: 'profile' });
 
   return (
+    <div className="stage">
     <div className="phone">
-      {route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && <Header onBell={() => setNotifOpen(true)} onSearch={() => setSearchOpen(true)} />}
+      {route.name !== 'auth' && route.name !== 'invite' && route.name !== 'accept' && <Header solid={route.name === 'routes' || route.name === 'route'} onBell={() => setNotifOpen(true)} onSearch={() => setSearchOpen(true)} />}
 
       {route.name === 'auth' && <Auth ctx={ctx} />}
       {route.name === 'invite' && <Invite ctx={ctx} />}
@@ -147,6 +169,7 @@ export default function App() {
       {route.name === 'idea' && <IdeaDetail ctx={ctx} id={route.id!} />}
       {route.name === 'hint' && <HintForm ctx={ctx} id={route.id!} />}
       {route.name === 'hint-sent' && <HintSent ctx={ctx} id={route.id!} />}
+      {route.name === 'hint-view' && <HintView ctx={ctx} id={route.id!} />}
       {route.name === 'hints' && <MyHints ctx={ctx} />}
       {route.name === 'favorites' && <Favorites ctx={ctx} />}
       {route.name === 'routes' && <Routes ctx={ctx} />}
@@ -160,7 +183,7 @@ export default function App() {
       {showNav && (
         <>
           <div className="fade-bottom" />
-          <BottomNav active={navActive} go={goNav} initial={profile.name.charAt(0).toUpperCase()} />
+          <BottomNav active={navActive} go={goNav} initial={profile.name.charAt(0).toUpperCase()} avatar={profile.avatar} />
         </>
       )}
 
@@ -168,9 +191,20 @@ export default function App() {
       {notifOpen && (
         <div className="modal-backdrop" onClick={() => setNotifOpen(false)} role="dialog" aria-modal="true">
           <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-handle" style={{ position: 'static', margin: '6px auto 14px' }} />
-            <div className="h3" style={{ marginBottom: 12 }}>Уведомления</div>
+            <div className="h3" style={{ margin: '14px 0 12px' }}>Уведомления</div>
             <div style={{ display: 'grid', gap: 10 }}>
+              {hints.find((h) => h.dir === 'in' && h.status === 'отправлен') && (
+                <button
+                  className="plate" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14, border: 'none', textAlign: 'left', width: '100%', cursor: 'pointer', boxShadow: 'inset 0 0 0 2px var(--primary)' }}
+                  onClick={() => { const h = hints.find((x) => x.dir === 'in' && x.status === 'отправлен'); setNotifOpen(false); if (h) go({ name: 'hint-view', id: h.id }); }}
+                >
+                  <span style={{ color: 'var(--primary)' }}><IconBell /></span>
+                  <div style={{ fontSize: 13, lineHeight: '17px' }}>
+                    <b>{hints.find((x) => x.dir === 'in' && x.status === 'отправлен')!.from} намекает на свидание.</b> Откройте, чтобы увидеть идею и секрет.
+                    <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>{hints.find((x) => x.dir === 'in' && x.status === 'отправлен')!.date}</div>
+                  </div>
+                </button>
+              )}
               <div className="plate" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
                 <span style={{ color: 'var(--primary)' }}><IconBell /></span>
                 <div style={{ fontSize: 13, lineHeight: '17px' }}>
@@ -181,7 +215,7 @@ export default function App() {
               <div className="plate" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
                 <span style={{ color: 'var(--primary)' }}><IconBell /></span>
                 <div style={{ fontSize: 13, lineHeight: '17px' }}>
-                  <b>Ваш намёк услышан!</b> Партнёр открыл письмо про десерт-тур.
+                  <b>Ваш намёк услышан!</b> Партнёр открыл письмо про фотосессию в «наедине».
                   <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>20.10.2026</div>
                 </div>
               </div>
@@ -191,11 +225,25 @@ export default function App() {
         </div>
       )}
 
+      {/* Карточки недели */}
+      {weekOpen && (
+        <div className="modal-backdrop" onClick={closeWeek} role="dialog" aria-modal="true" aria-label="Карточки на неделю">
+          <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="h3" style={{ margin: '14px 0 8px' }}>Карточки на неделю</div>
+            <p style={{ fontSize: 13, lineHeight: '17px', margin: 0 }}>
+              Здесь четыре идеи на {wk.label}. Нажмите на обложку, и она перевернётся: на обратной стороне само задание. Новые карточки откроем {wk.nextLabel}.
+            </p>
+            <button className="btn-primary" style={{ width: '100%', marginTop: 18 }} onClick={closeWeek}>Понятно</button>
+          </div>
+        </div>
+      )}
+
       {/* Поиск */}
       {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} ctx={ctx} />}
 
       {/* Быстрый вход в события из профиля-меню нет; добавим скрытый доступ: долгое нажатие на логотип не нужно. */}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
+    </div>
     </div>
   );
 }
@@ -214,9 +262,9 @@ function SearchModal({ onClose, ctx }: { onClose: () => void; ctx: AppCtx }) {
       <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" style={{ position: 'static', margin: '6px auto 14px' }} />
         <div className="h3" style={{ marginBottom: 12 }}>Поиск по картотеке</div>
-        <input className="input" autoFocus placeholder="Например: каток, спа, фондю…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" autoFocus placeholder="Например: пицца, фотосессия, геокэшинг" value={q} onChange={(e) => setQ(e.target.value)} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginTop: 14 }}>
-          {res.length === 0 && <div style={{ gridColumn: '1/-1', fontSize: 13, color: 'var(--text-2)', padding: '8px 0' }}>Ничего не нашлось. Попробуйте «каток» или «спа».</div>}
+          {res.length === 0 && <div style={{ gridColumn: '1/-1', fontSize: 13, color: 'var(--text-2)', padding: '8px 0' }}>Ничего не нашлось. Попробуйте «пицца» или «фотосессия».</div>}
           {res.map((i) => (
             <IdeaTile key={i.id} idea={i} onClick={() => { onClose(); ctx.go({ name: 'idea', id: i.id }); }} />
           ))}
