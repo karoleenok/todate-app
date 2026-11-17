@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Header, BottomNav, type NavKey, IconBell } from './ui';
 import { weekInfo } from './links';
-import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, HintView, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes, LimitSheet, FREE_HINTS } from './screens';
+import { lazy, Suspense } from 'react';
+import { applyAdmin, getFreeHints, loadAdmin, saveAdmin, type AdminState } from './store';
+import { Auth, Invite, Accept, Home, IdeaDetail, HintForm, HintSent, HintView, MyHints, Favorites, Routes, RouteDetail, Events, Profile, Account, Paywall, Notes, LimitSheet } from './screens';
+
+const Admin = lazy(() => import('./admin'));
+const Onboarding = lazy(() => import('./onboarding'));
 
 export type RouteName =
   | 'auth' | 'invite' | 'accept' | 'home' | 'idea' | 'hint' | 'hint-sent' | 'hint-view' | 'hints'
-  | 'favorites' | 'routes' | 'route' | 'events' | 'profile' | 'account' | 'paywall' | 'notes';
+  | 'favorites' | 'routes' | 'route' | 'events' | 'profile' | 'account' | 'paywall' | 'notes' | 'admin';
 
 export interface Route { name: RouteName; id?: string }
 
 export interface Hint { id: string; ideaId: string; from: string; to: string; date: string; status: 'отправлен' | 'услышан'; dir?: 'in'; secret?: string }
 
-export interface Profile { name: string; email: string; partner?: string; avatar?: string; partnerStatus?: 'invited' | 'linked'; partnerName?: string }
+export interface Profile { name: string; email: string; partner?: string; avatar?: string; partnerStatus?: 'invited' | 'linked'; partnerName?: string; isAdmin?: boolean }
 
 export interface AppCtx {
   go: (r: Route) => void;
@@ -33,6 +38,8 @@ export interface AppCtx {
   register: (name: string, email: string) => void;
   invitePartner: (email: string) => void;
   toast: (msg: string) => void;
+  admin: AdminState;
+  saveAdmin: (s: AdminState) => void;
 }
 
 function load<T>(key: string, fallback: T): T {
@@ -45,7 +52,7 @@ function load<T>(key: string, fallback: T): T {
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
   const [name, id] = h.split('/');
-  const names: RouteName[] = ['auth', 'invite', 'accept', 'home', 'idea', 'hint', 'hint-sent', 'hint-view', 'hints', 'favorites', 'routes', 'route', 'events', 'profile', 'account', 'paywall', 'notes'];
+  const names: RouteName[] = ['auth', 'invite', 'accept', 'home', 'idea', 'hint', 'hint-sent', 'hint-view', 'hints', 'favorites', 'routes', 'route', 'events', 'profile', 'account', 'paywall', 'notes', 'admin'];
   if (names.includes(name as RouteName)) return { name: name as RouteName, id };
   return { name: 'home' };
 }
@@ -61,6 +68,7 @@ export default function App() {
       { id: 'h2', ideaId: 'ciao-kaiju', from: 'Каролина', to: 'matvey@example.com', date: '15.11.2026', status: 'отправлен' },
     ]),
   );
+  const [admin, setAdmin] = useState<AdminState>(() => { const a = loadAdmin(); applyAdmin(a); return a; });
   const [freeUsed, setFreeUsed] = useState<number>(() => load('td_free_used', 0));
   const [limitOpen, setLimitOpen] = useState(false);
   const [subscribed, setSubscribed] = useState<number>(() => load('td_sub', 0));
@@ -70,17 +78,30 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false);
   const wk = useMemo(() => weekInfo(), []);
   const [weekOpen, setWeekOpen] = useState(false);
+  // Новичку показываем интерактивное обучение вместо плашки «карточки на неделю»
+  const [onb, setOnb] = useState<boolean>(() => {
+    try { return !localStorage.getItem('td_onb_done') && !/^#\/?(auth|invite|accept|hint-view|admin)/.test(window.location.hash); } catch { return false; }
+  });
+  const closeOnb = useCallback(() => {
+    setOnb(false);
+    try { localStorage.setItem('td_onb_done', '1'); } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    const h = () => setOnb(true);
+    window.addEventListener('td-onb-restart', h);
+    return () => window.removeEventListener('td-onb-restart', h);
+  }, []);
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Первый заход за неделю: напоминаем, что карточки обновляются раз в неделю
   useEffect(() => {
-    if (route.name !== 'home') return;
+    if (route.name !== 'home' || onb) return;
     let seen = '';
     try { seen = localStorage.getItem('td_week_seen') ?? ''; } catch { /* ignore */ }
     if (seen === wk.key) return;
     const t = window.setTimeout(() => setWeekOpen(true), 500);
     return () => window.clearTimeout(t);
-  }, [route.name, wk.key]);
+  }, [route.name, wk.key, onb]);
   const closeWeek = () => { setWeekOpen(false); try { localStorage.setItem('td_week_seen', wk.key); } catch { /* ignore */ } };
 
   useEffect(() => { localStorage.setItem('td_favs', JSON.stringify(favorites)); }, [favorites]);
@@ -143,9 +164,9 @@ export default function App() {
         ...hs,
       ]);
     },
-    freeLeft: subscribed > 0 ? null : Math.max(0, FREE_HINTS - freeUsed),
+    freeLeft: subscribed > 0 ? null : Math.max(0, getFreeHints() - freeUsed),
     startHint: (ideaId) => {
-      if (subscribed > 0 || freeUsed < FREE_HINTS) go({ name: 'hint', id: ideaId });
+      if (subscribed > 0 || freeUsed < getFreeHints()) go({ name: 'hint', id: ideaId });
       else setLimitOpen(true);
     },
     subscribed,
@@ -155,11 +176,14 @@ export default function App() {
     register: (name, email) => { setProfile({ name, email }); setRegistered(true); },
     invitePartner: (email) => setProfile((p) => ({ ...p, partner: email })),
     toast,
-  }), [go, back, favorites, hints, subscribed, freeUsed, profile, registered, toast]);
+    admin,
+    saveAdmin: (next) => { if (!saveAdmin(next)) toast('Не хватило места в браузере: уберите лишнюю картинку'); applyAdmin(next); setAdmin(next); },
+  }), [go, back, favorites, hints, subscribed, freeUsed, profile, registered, toast, admin]);
 
   const navActive: NavKey =
-    route.name === 'home' || route.name === 'idea' || route.name === 'hint' || route.name === 'hint-sent' || route.name === 'favorites' ? 'home'
+    route.name === 'home' || route.name === 'idea' || route.name === 'hint' || route.name === 'hint-sent' ? 'home'
     : route.name === 'hints' || route.name === 'hint-view' ? 'hints'
+    : route.name === 'favorites' ? 'favorites'
     : route.name === 'routes' || route.name === 'route' ? 'routes'
     : route.name === 'events' ? 'events'
     : 'profile';
@@ -169,6 +193,7 @@ export default function App() {
     k === 'home' ? go({ name: 'home' })
     : k === 'routes' ? go({ name: 'routes' })
     : k === 'events' ? go({ name: 'events' })
+    : k === 'favorites' ? go({ name: 'favorites' })
     : k === 'hints' ? go({ name: 'hints' })
     : go({ name: 'profile' });
 
@@ -194,6 +219,9 @@ export default function App() {
       {route.name === 'account' && <Account ctx={ctx} />}
       {route.name === 'paywall' && <Paywall ctx={ctx} />}
       {route.name === 'notes' && <Notes ctx={ctx} />}
+      {route.name === 'admin' && (profile.isAdmin
+        ? <Suspense fallback={<div className="screen" />}><Admin ctx={ctx} id={route.id} /></Suspense>
+        : <Profile ctx={ctx} />)}
 
       {showNav && (
         <>
@@ -246,12 +274,14 @@ export default function App() {
           <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="h3" style={{ margin: '14px 0 8px' }}>Карточки на неделю</div>
             <p style={{ fontSize: 13, lineHeight: '17px', margin: 0 }}>
-              Здесь четыре идеи на {wk.label}. Нажмите на обложку, и она перевернётся: на обратной стороне само задание. Новые карточки откроем {wk.nextLabel}.
+              Здесь четыре идеи на {wk.label}. Смахните карточку влево или вправо, чтобы увидеть следующую, или нажмите на неё, чтобы открыть подробности. Новые карточки откроем {wk.nextLabel}.
             </p>
             <button className="btn-primary" style={{ width: '100%', marginTop: 18 }} onClick={closeWeek}>Понятно</button>
           </div>
         </div>
       )}
+
+      {onb && route.name !== 'auth' && <Suspense fallback={null}><Onboarding ctx={ctx} route={route} onClose={closeOnb} /></Suspense>}
 
       {/* Бесплатные намёки закончились */}
       {limitOpen && (

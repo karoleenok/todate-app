@@ -9,13 +9,15 @@ export interface Idea {
   metro?: string;
   description?: string;
   secret?: string; // секретный бонус — узнаёт только получатель письма
+  place?: string; // название места (демо, правится в админке)
+  address?: string; // адрес места (демо, правится в админке)
   shape: 'sun' | 'bottle' | 'pear' | 'leaves';
   /** Имя файла в public/cards без расширения. Если задано — карточка целиком картинка (WebP, углы уже скруглены) */
   image?: string;
 }
 
 /** Путь к картинке карточки. Относительный, чтобы работало и на корне домена, и в подпапке */
-export const cardSrc = (name: string) => `./cards/${name}.webp`;
+export const cardSrc = (name: string) => (name.startsWith('data:') ? name : `./cards/${name}.webp`);
 
 /** Строка приглашения: у нарисованных карточек заголовок продолжает «Давай …», у картинок он уже в повелительном наклонении */
 export const inviteLine = (i: Idea) =>

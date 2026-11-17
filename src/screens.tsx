@@ -7,6 +7,7 @@ import {
 } from './ui';
 import type { AppCtx } from './App';
 import { ROUTE_GEO } from './routeGeo';
+import { getFreeHints, numWord, plural } from './store';
 
 // Карта подгружается отдельным куском, пока грузится — показываем заглушку
 const StreetMap = lazy(() => import('./StreetMap'));
@@ -53,7 +54,6 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
   const [drag, setDrag] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [leaving, setLeaving] = useState<0 | 1 | -1>(0);
-  const [flipped, setFlipped] = useState(false);
   const startX = React.useRef<number | null>(null);
   const lastX = React.useRef(0);
   const lastT = React.useRef(0);
@@ -68,11 +68,11 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
   const p = Math.min(Math.abs(drag) / 120, 1);
 
   const finishLeave = (dir: 1 | -1) => {
+    window.dispatchEvent(new Event('td-swipe'));
     setLeaving(dir);
     setDragging(false);
     window.setTimeout(() => {
       setIdx((i) => Math.min(i + 1, n));
-      setFlipped(false);
       setLeaving(0);
       setDrag(0);
     }, 320);
@@ -139,7 +139,7 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
           // Короткое касание без сдвига — это тап: по передней карте переворачиваем, по следующей — листаем
           if (Math.abs(dx) < 8 && !done) {
             const hit = downEl.current?.closest('[data-card]')?.getAttribute('data-card');
-            if (hit === 'front') { if (cur?.image) setFlipped((f) => !f); else if (cur) onOpen?.(cur.id); }
+            if (hit === 'front') { if (cur) onOpen?.(cur.id); }
             else if (hit === 'next') finishLeave(1);
           }
         }
@@ -171,7 +171,7 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
                   boxShadow: 'none', zIndex: near ? 2 : 1, cursor: near ? 'pointer' : 'default',
                 }}
               >
-                {back.image ? <CardImage idea={back} eager cover /> : (<>
+                {back.image ? <CardImage idea={back} eager /> : (<>
                 <Silhouette shape={back.shape} color={cardShapeColor[back.category]} />
                 <div style={{ position: 'absolute', top: 22, left: 0, right: 0, textAlign: 'center' }}><Logo dark small /></div>
                 <div
@@ -191,22 +191,20 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
         {!done && cur && (
           <button
             key={cur.id}
-            className={`${cardCls(cur)}${cur.image ? ' flip-card' : ''}`}
+            className={cardCls(cur)}
             data-card="front"
+            data-onb="deck"
             // Клавиатура (Enter/Space): у такого клика detail === 0; тапы пальцем и мышью обрабатывает onPointerUp
-            onClick={(e) => { if (e.detail !== 0) return; if (cur.image) setFlipped((f) => !f); else onOpen?.(cur.id); }}
+            onClick={(e) => { if (e.detail !== 0) return; onOpen?.(cur.id); }}
             style={{
               position: 'absolute', inset: 0, border: 'none', padding: 0, zIndex: 3,
               cursor: onOpen ? (dragging ? 'grabbing' : 'grab') : 'default', display: 'block',
               ...frontTransform(),
             }}
-            aria-label={cur.image ? (flipped ? 'Перевернуть на обложку' : 'Показать задание') : cur.title}
+            aria-label={cur.title}
           >
             {cur.image ? (
-              <span className={`flip-inner ${flipped ? 'flipped' : ''}`}>
-                <span className="flip-face"><CardImage idea={cur} eager cover /></span>
-                <span className="flip-face back"><CardImage idea={cur} eager /></span>
-              </span>
+              <CardImage idea={cur} eager />
             ) : (<>
             <Silhouette shape={cur.shape} color={cardShapeColor[cur.category]} />
             <div style={{ position: 'absolute', top: 22, left: 0, right: 0, textAlign: 'center' }}><Logo dark small /></div>
@@ -220,11 +218,6 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
               {cur.title}
             </div>
             </>)}
-          </button>
-        )}
-        {!done && cur?.image && flipped && leaving === 0 && (
-          <button className="deck-open" onPointerDown={(e) => e.stopPropagation()} onClick={() => onOpen?.(cur.id)} aria-label="Открыть карточку">
-            <IconChevron />
           </button>
         )}
         {/* Колода кончилась: заглушка с кнопкой «Смотреть заново» */}
@@ -241,7 +234,7 @@ export function Deck({ ideas, onOpen, height = 395 }: { ideas: Idea[]; onOpen?: 
             <p style={{ fontSize: 13, lineHeight: '17px', color: 'var(--text-2)', margin: '10px 0 18px' }}>
               Новые откроем в понедельник.
             </p>
-            <button className="btn-primary" style={{ height: 46 }} onClick={() => { setIdx(0); setFlipped(false); }}>
+            <button className="btn-primary" style={{ height: 46 }} onClick={() => setIdx(0)}>
               Смотреть заново
             </button>
           </div>
@@ -654,6 +647,7 @@ export function IdeaDetail({ ctx, id }: { ctx: AppCtx; id: string }) {
               Намекнуть о свидании
             </button>
             <button
+              data-onb="heart"
               className={`round-icon-btn ${liked ? 'liked' : ''}`}
               onClick={() => ctx.toggleFavorite(idea.id)}
               aria-label={liked ? 'Убрать из избранного' : 'В избранное'}
@@ -779,8 +773,8 @@ export function HintForm({ ctx, id }: { ctx: AppCtx; id: string }) {
           <p style={{ fontSize: 13, lineHeight: '17px', color: 'var(--text-2)', marginTop: 0, maxWidth: 330 }}>
             Партнёру придёт идея с локацией, длительностью, метро и примерной стоимостью. А ещё секретный бонус, который не узнаете даже вы.
           </p>
-          {ctx.freeLeft !== null && (
-            <div className="param" style={{ marginTop: 12 }}>Бесплатных намёков: осталось {ctx.freeLeft} из {FREE_HINTS}</div>
+          {ctx.freeLeft !== null && getFreeHints() > 0 && (
+            <div className="param" style={{ marginTop: 12 }}>Бесплатных намёков: осталось {ctx.freeLeft} из {getFreeHints()}</div>
           )}
 
           <div className="plate" style={{ marginTop: 16, padding: '16px 16px 0', overflow: 'hidden' }}>
@@ -955,13 +949,16 @@ export function HintView({ ctx, id }: { ctx: AppCtx; id: string }) {
             {idea.metro && <span className="param">{idea.metro}</span>}
           </div>
           <div className="plate" style={{ padding: '14px 16px', marginTop: 12 }}>
-            <div style={{ fontSize: 11, lineHeight: '14px', color: 'var(--text-2)' }}>Идея</div>
-            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: '18px', marginTop: 4 }}>{idea.title}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: '18px' }}>
+              {idea.place ?? 'Название места'}{idea.metro ? ` · ${idea.metro}` : ''}
+            </div>
+            <div style={{ fontSize: 13, lineHeight: '18px', marginTop: 4 }}>{idea.address ?? 'Санкт-Петербург, адрес уточняется'}</div>
+            <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--text-2)', marginTop: 6 }}>Время: {idea.duration} · Цена: {idea.price}</div>
           </div>
-          {hint.secret && (
+          {(idea.secret || hint.secret) && (
             <div style={{ marginTop: 12, padding: '14px 16px', borderRadius: 20, border: '2px solid var(--text)', background: '#fff' }}>
               <div style={{ fontSize: 14, fontWeight: 700, lineHeight: '18px' }}>Секрет только для тебя</div>
-              <div style={{ fontSize: 13, lineHeight: '18px', marginTop: 6 }}>{hint.secret}</div>
+              <div style={{ fontSize: 13, lineHeight: '18px', marginTop: 6 }}>{idea.secret ?? hint.secret}</div>
             </div>
           )}
           {heard ? (
@@ -1580,6 +1577,13 @@ export function Profile({ ctx }: { ctx: AppCtx }) {
             {row(<IconTheme />, 'Тема', () => ctx.toast('Светлая тема. Тёмная — в планах'))}
             <div style={{ height: 1, background: 'var(--divider)', margin: '0 16px 0 60px' }} />
             {row(<IconLang />, 'Язык', () => ctx.toast('Пока только русский'))}
+            <div style={{ height: 1, background: 'var(--divider)', margin: '0 16px 0 60px' }} />
+            {row(<IconSliders />, 'Показать обучение заново', () => { try { localStorage.removeItem('td_onb_done'); } catch { /* ignore */ } ctx.go({ name: 'home' }); window.dispatchEvent(new Event('td-onb-restart')); })}
+          </div>
+          <div className="plate" style={{ padding: 0, overflow: 'hidden' }}>
+            {ctx.profile.isAdmin
+              ? row(<IconSliders />, 'Админка', () => ctx.go({ name: 'admin' }))
+              : row(<IconSliders />, 'Только в прототипе: войти как админ', () => { ctx.setProfile({ ...ctx.profile, isAdmin: true }); ctx.go({ name: 'admin' }); })}
           </div>
         </div>
         <div style={{ height: 40 }} />
@@ -1703,7 +1707,6 @@ export function Paywall({ ctx }: { ctx: AppCtx }) {
 
 /* ================= БЕСПЛАТНЫЕ НАМЁКИ ЗАКОНЧИЛИСЬ ================= */
 // Два бонусных намёка даём без подписки. На третьем нажатии «Намекнуть» открывается эта шторка
-export const FREE_HINTS = 2;
 
 export function LimitSheet({ ctx, onClose, onReset }: { ctx: AppCtx; onClose: () => void; onReset: () => void }) {
   const [plan, setPlan] = useState('month');
@@ -1713,9 +1716,9 @@ export function LimitSheet({ ctx, onClose, onReset }: { ctx: AppCtx; onClose: ()
     <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="limit-title">
       <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" style={{ position: 'static', margin: '6px auto 14px' }} />
-        <div id="limit-title" className="h3" style={{ margin: '0 0 8px' }}>Два бесплатных намёка закончились</div>
+        <div id="limit-title" className="h3" style={{ margin: '0 0 8px' }}>Бесплатные намёки закончились</div>
         <p style={{ fontSize: 13, lineHeight: '17px', margin: 0 }}>
-          Вы отправили оба бонусных намёка. Чтобы свиданий в вашей жизни становилось больше, оформите подписку.
+          Вы использовали {numWord(getFreeHints())} {plural(getFreeHints(), 'бонусный намёк', 'бонусных намёка', 'бонусных намёков')}. Чтобы свиданий в вашей жизни становилось больше, оформите подписку.
         </p>
         <div style={{ display: 'grid', gap: 8, margin: '14px 0 0', padding: 0 }}>
           {perks.map((t) => (
